@@ -1,0 +1,28 @@
+# Configuração de DEMONSTRAÇÃO em VPS — as mesmas três cidades da
+# backend.demo.yaml, mas endurecida para uma máquina exposta na internet.
+#
+# Diferença que importa: aqui NENHUM token tem padrão embutido. Se a variável
+# de ambiente não estiver definida, o backend recusa subir (fail-closed, regra 3
+# do projeto). Numa caixa com IP público, token fraco em arquivo é vazamento —
+# os tokens vêm do ambiente (deploy/.env, gerado por deploy/gerar-env.sh) e
+# nunca entram no repositório.
+#
+# Sobe pelo Docker Compose em deploy/. Ver deploy/README.md.
+
+banco: "dados/vps/ecoar.db"
+armazenamento: "dados/vps/pacotes"
+tamanho_maximo_pacote_mb: 64
+
+tokens:
+  bauru-ponte-sao-joao-01: "${ECOAR_TOKEN_BAURU_01}"
+  bauru-batalha-centro-02: "${ECOAR_TOKEN_BAURU_02}"
+  bauru-jardim-europa-03: "${ECOAR_TOKEN_BAURU_03}"
+  piracicaba-beira-rio-01: "${ECOAR_TOKEN_PIRA_01}"
+  piracicaba-av-independencia-02: "${ECOAR_TOKEN_PIRA_02}"
+  piracicaba-vila-rezende-03: "${ECOAR_TOKEN_PIRA_03}"
+  marilia-sampaio-vidal-01: "${ECOAR_TOKEN_MARILIA_01}"
+  marilia-esplanada-02: "${ECOAR_TOKEN_MARILIA_02}"
+
+tokens_operador:
+  operador-transito: "${ECOAR_TOKEN_OPERADOR}"
+  admin-studio-cerne: "${ECOAR_TOKEN_ADMIN}"

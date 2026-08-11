@@ -1,0 +1,13 @@
+# Fora da imagem: dados operacionais, ambiente local, cache, testes, git.
+dados/
+.venv/
+venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+.git/
+.gitignore
+deploy/.env
+docs/
+*.md

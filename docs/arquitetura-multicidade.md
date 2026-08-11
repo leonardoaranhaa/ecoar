@@ -372,6 +372,13 @@ auditoria encadeia cada decisão — a demo verifica ~447 entradas íntegras). �
 prova do multi-tenant na base: **um backend, muitas instalações**. O isolamento
 por município (login por cidade) é a fase seguinte descrita nas seções acima.
 
+Para levar essa demo a uma reunião num servidor, o kit de deploy está em
+`deploy/`: Docker Compose que constrói a imagem, semeia no primeiro boot e sobe
+o painel em `IP:8000`, com tokens fortes gerados por `deploy/gerar-env.sh` (o
+`config/backend.vps.yaml` recusa subir sem eles — fail-closed). O passo a passo
+do zero, incluindo escolha de VPS nacional e como pôr domínio com HTTPS depois,
+está em `deploy/README.md`.
+
 **Recomendação:** levar a **Opção A** como principal — é o "paliativo e
 demonstrativo" que a reunião pede, compartilhável e à prova de falha — e ter a
 **Opção B** de reserva para um aprofundamento técnico, se a conversa avançar.
