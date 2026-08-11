@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from backend import db
 from backend.armazenamento import Armazenamento
+from backend.audit_log import EVENTO_RECEBIDO, EVENTO_REJEITADO, TrilhaAuditoria
 from backend.config import ConfigBackend
 from backend.seguranca import autenticar_no
 from edge.evidence_packager import verificar_pacote
@@ -43,7 +44,12 @@ class Heartbeat(BaseModel):
     detalhe: dict = Field(default_factory=dict)
 
 
-def criar_rotas(config: ConfigBackend, conexao, armazenamento: Armazenamento) -> APIRouter:
+def criar_rotas(
+    config: ConfigBackend,
+    conexao,
+    armazenamento: Armazenamento,
+    trilha: TrilhaAuditoria,
+) -> APIRouter:
     rotas = APIRouter(prefix="/v1", tags=["ingestão"])
     no_autenticado = autenticar_no(config)
 
@@ -59,8 +65,11 @@ def criar_rotas(config: ConfigBackend, conexao, armazenamento: Armazenamento) ->
     ):
         conteudo = await pacote.read()
         if len(conteudo) > config.tamanho_maximo_bytes:
-            db.registrar_rejeicao(conexao, no_id, None, "pacote acima do tamanho máximo")
-            conexao.commit()
+            with db.transacao(conexao):
+                db.registrar_rejeicao(conexao, no_id, None, "pacote acima do tamanho máximo")
+                trilha.registrar(
+                    EVENTO_REJEITADO, ator=no_id, detalhe={"motivo": "acima do tamanho máximo"}
+                )
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail=f"pacote acima de {config.tamanho_maximo_pacote_mb} MB",
@@ -77,8 +86,14 @@ def criar_rotas(config: ConfigBackend, conexao, armazenamento: Armazenamento) ->
 
             if not relatorio.valido:
                 motivo = "; ".join(relatorio.problemas)
-                db.registrar_rejeicao(conexao, no_id, evento_id, motivo)
-                conexao.commit()
+                with db.transacao(conexao):
+                    db.registrar_rejeicao(conexao, no_id, evento_id, motivo)
+                    trilha.registrar(
+                        EVENTO_REJEITADO,
+                        ator=no_id,
+                        evento_id=evento_id,
+                        detalhe={"motivo": "pacote não íntegro", "problemas": list(relatorio.problemas)},
+                    )
                 log.warning("pacote recusado do nó %s: %s", no_id, motivo)
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -91,8 +106,14 @@ def criar_rotas(config: ConfigBackend, conexao, armazenamento: Armazenamento) ->
                     f"o token autentica o nó {no_id!r} mas o manifesto declara "
                     f"{no_do_manifesto!r}"
                 )
-                db.registrar_rejeicao(conexao, no_id, evento_id, motivo)
-                conexao.commit()
+                with db.transacao(conexao):
+                    db.registrar_rejeicao(conexao, no_id, evento_id, motivo)
+                    trilha.registrar(
+                        EVENTO_REJEITADO,
+                        ator=no_id,
+                        evento_id=evento_id,
+                        detalhe={"motivo": "nó do token difere do manifesto"},
+                    )
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=motivo)
 
             existente = db.buscar_evento_por_chave(conexao, no_id, evento_id)
@@ -107,6 +128,7 @@ def criar_rotas(config: ConfigBackend, conexao, armazenamento: Armazenamento) ->
             instante = float(manifesto.get("instante_pico_epoch") or 0.0)
             destino = armazenamento.guardar(conteudo, no_id, evento_id, instante)
 
+            decisao = manifesto.get("decisao") or {}
             with db.transacao(conexao):
                 geo = (manifesto.get("no") or {}).get("geolocalizacao") or {}
                 db.registrar_no(
@@ -119,12 +141,25 @@ def criar_rotas(config: ConfigBackend, conexao, armazenamento: Armazenamento) ->
                 identificador = db.inserir_evento(
                     conexao, _campos_do_manifesto(manifesto, no_id, instante, destino)
                 )
+                # Metadado, nunca conteúdo de placa (D6). O que amarra a
+                # evidência à trilha é o hash do manifesto.
+                trilha.registrar(
+                    EVENTO_RECEBIDO,
+                    ator=no_id,
+                    evento_id=evento_id,
+                    detalhe={
+                        "acao": decisao.get("acao"),
+                        "versao_politica": decisao.get("versao_politica"),
+                        "hash_manifesto": manifesto.get("hash_manifesto"),
+                        "modo": manifesto.get("modo"),
+                    },
+                )
 
             log.info(
                 "evento %s do nó %s recebido (%s)",
                 evento_id,
                 no_id,
-                (manifesto.get("decisao") or {}).get("acao"),
+                decisao.get("acao"),
             )
             return RespostaIngestao(
                 status="recebido",

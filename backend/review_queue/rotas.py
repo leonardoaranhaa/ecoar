@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from backend import db
 from backend.armazenamento import Armazenamento, MidiaNaoEncontrada
+from backend.audit_log import ACESSO_EVIDENCIA, REVISAO, TrilhaAuditoria
 from backend.config import ConfigBackend
 from backend.seguranca import Identidade, autenticar_operador
 from edge.evidence_packager import ler_manifesto
@@ -48,7 +49,12 @@ class RespostaRevisao(BaseModel):
     operador: str
 
 
-def criar_rotas(config: ConfigBackend, conexao, armazenamento: Armazenamento) -> APIRouter:
+def criar_rotas(
+    config: ConfigBackend,
+    conexao,
+    armazenamento: Armazenamento,
+    trilha: TrilhaAuditoria,
+) -> APIRouter:
     rotas = APIRouter(prefix="/v1", tags=["revisão"])
     operador_autenticado = autenticar_operador(config)
 
@@ -129,6 +135,12 @@ def criar_rotas(config: ConfigBackend, conexao, armazenamento: Armazenamento) ->
                 observacao=pedido.observacao,
                 novo_status=novo_status,
             )
+            trilha.registrar(
+                REVISAO,
+                ator=identidade.nome,
+                evento_id=linha["evento_id"],
+                detalhe={"decisao": pedido.decisao, "novo_status": novo_status},
+            )
 
         log.info(
             "evento %s: %s por %s", identificador, pedido.decisao, identidade.nome
@@ -169,6 +181,16 @@ def criar_rotas(config: ConfigBackend, conexao, armazenamento: Armazenamento) ->
             conteudo = armazenamento.ler_midia(linha["caminho_pacote"], caminho)
         except MidiaNaoEncontrada as erro:
             raise HTTPException(status_code=404, detail=str(erro))
+
+        # Quem abriu a evidência, qual, quando. Numa contestação, saber quem
+        # teve acesso ao pacote é parte da cadeia de custódia.
+        with db.transacao(conexao):
+            trilha.registrar(
+                ACESSO_EVIDENCIA,
+                ator=identidade.nome,
+                evento_id=linha["evento_id"],
+                detalhe={"midia": nome},
+            )
 
         tipos = {".png": "image/png", ".jpg": "image/jpeg", ".wav": "audio/wav"}
         tipo = tipos.get(caminho[caminho.rfind(".") :], "application/octet-stream")
