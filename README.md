@@ -99,8 +99,8 @@ Construção por etapas, conforme `01-tecnico/prompts-claude-code.md` do projeto
 | 3 | `edge/classifier` | **feito** |
 | 4 | `edge/camera_trigger` | **feito** |
 | 5 | `edge/evidence_packager` | **feito** |
-| 6 | `backend/ingestion_api` | pendente |
-| 7 | `backend/review_queue` + `dashboard` | pendente |
+| 6 | `backend/ingestion_api` | **feito** |
+| 7 | `backend/review_queue` + `dashboard` | **feito** |
 | 8 | `vision/` | pendente |
 | 9 | `backend/training_pipeline` | pendente |
 | 10 | `backend/audit_log` | pendente |
