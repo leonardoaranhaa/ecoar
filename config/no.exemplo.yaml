@@ -50,6 +50,38 @@ array:
   azimute_offset_graus: 0.0
   velocidade_som_ms: 343.0
 
+gatilho:
+  # Limiares da decisão de acionamento. São por nó: uma via de tráfego pesado
+  # tem piso de ruído diferente de uma rua residencial.
+  #
+  # A versão da política é gravada em CADA evento. Mudou limiar, muda a versão —
+  # senão é impossível responder depois por que um evento acionou e outro não.
+  versao_politica: "politica/1.0"
+  spl_db_minimo: 75.0          # pré-gatilho barato, estimativa do array
+  score_aciona: 0.80           # acima disso, e com o resto atendido, dispara
+  score_ambiguo: 0.45          # entre os dois, registra sem acionar a câmera
+  doa_confianca_minima: 0.50
+  doa_margem_maxima_graus: 15.0
+  azimute_camera_graus: 0.0    # para onde a câmera aponta, na convenção do array
+  campo_visao_graus: 90.0
+
+camera:
+  tipo: mock                   # mock | opencv
+  dispositivo: 0
+  largura: 1920
+  altura: 1080
+  aquecimento_quadros: 3       # os primeiros quadros saem com exposição errada
+  diretorio: "dados/capturas"
+
+retencao:
+  # Prazos por finalidade — ver docs/legal/lgpd.md. Viajam dentro de cada
+  # pacote de evidência: quem recebe vê sob qual política ele foi gerado.
+  metadado_dias: 730
+  midia_pendente_dias: 30
+  midia_confirmada_dias: 180
+  midia_rejeitada_dias: 7
+  treino_dias: 1095
+
 classificador:
   # auto       = usa o modelo neural se ele carregar, senão cai para o
   #              classificador de referência e registra a degradação

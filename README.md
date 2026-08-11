@@ -97,8 +97,8 @@ Construção por etapas, conforme `01-tecnico/prompts-claude-code.md` do projeto
 | 1 | `edge/audio_capture` | **feito** |
 | 2 | `edge/localization` | **feito** |
 | 3 | `edge/classifier` | **feito** |
-| 4 | `edge/camera_trigger` | pendente |
-| 5 | `edge/evidence_packager` | pendente |
+| 4 | `edge/camera_trigger` | **feito** |
+| 5 | `edge/evidence_packager` | **feito** |
 | 6 | `backend/ingestion_api` | pendente |
 | 7 | `backend/review_queue` + `dashboard` | pendente |
 | 8 | `vision/` | pendente |

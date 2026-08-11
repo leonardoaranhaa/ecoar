@@ -172,6 +172,102 @@ class ConfigSonometro:
 
 
 @dataclass(frozen=True)
+class ConfigRetencao:
+    """Prazos por finalidade — ver docs/legal/lgpd.md.
+
+    Viaja dentro de cada pacote de evidência de propósito: quem recebe o pacote
+    consegue ver sob qual política ele foi gerado, sem depender de consultar o
+    nosso sistema.
+    """
+
+    metadado_dias: int = 730
+    midia_pendente_dias: int = 30
+    midia_confirmada_dias: int = 180
+    midia_rejeitada_dias: int = 7
+    treino_dias: int = 1095
+
+    def validar(self) -> None:
+        for campo, valor in (
+            ("metadado_dias", self.metadado_dias),
+            ("midia_pendente_dias", self.midia_pendente_dias),
+            ("midia_confirmada_dias", self.midia_confirmada_dias),
+            ("midia_rejeitada_dias", self.midia_rejeitada_dias),
+            ("treino_dias", self.treino_dias),
+        ):
+            if valor <= 0:
+                raise ConfiguracaoInvalida(f"retencao.{campo} precisa ser positivo")
+        if self.midia_rejeitada_dias > self.midia_pendente_dias:
+            raise ConfiguracaoInvalida(
+                "retencao: evento rejeitado não pode ser guardado por mais tempo que "
+                "um evento ainda pendente — ele não virou prova nem vira treino"
+            )
+
+    def como_dict(self) -> dict[str, int]:
+        return {
+            "metadado_dias": self.metadado_dias,
+            "midia_pendente_dias": self.midia_pendente_dias,
+            "midia_confirmada_dias": self.midia_confirmada_dias,
+            "midia_rejeitada_dias": self.midia_rejeitada_dias,
+            "treino_dias": self.treino_dias,
+        }
+
+
+@dataclass(frozen=True)
+class ConfigGatilho:
+    """Limiares da decisão de acionamento.
+
+    São por nó, não constantes de código: uma via de tráfego pesado tem piso de
+    ruído diferente de uma rua residencial, e o campo de visão depende de como a
+    câmera foi apontada naquele poste.
+
+    `versao_politica` é gravada em cada evento. Mudar limiar sem mudar a versão
+    quebra a reprodutibilidade da decisão — que é o que sustenta o argumento de
+    determinismo perante contestação.
+    """
+
+    versao_politica: str = "politica/1.0"
+    spl_db_minimo: float = 75.0
+    score_aciona: float = 0.80
+    score_ambiguo: float = 0.45
+    doa_confianca_minima: float = 0.50
+    doa_margem_maxima_graus: float = 15.0
+    azimute_camera_graus: float = 0.0
+    campo_visao_graus: float = 90.0
+
+    def validar(self) -> None:
+        if not 0.0 < self.score_ambiguo < self.score_aciona <= 1.0:
+            raise ConfiguracaoInvalida(
+                "gatilho: é preciso 0 < score_ambiguo < score_aciona <= 1; recebi "
+                f"ambiguo={self.score_ambiguo}, aciona={self.score_aciona}"
+            )
+        if not 0.0 <= self.doa_confianca_minima <= 1.0:
+            raise ConfiguracaoInvalida("gatilho.doa_confianca_minima precisa estar entre 0 e 1")
+        if not 0.0 < self.campo_visao_graus <= 360.0:
+            raise ConfiguracaoInvalida("gatilho.campo_visao_graus precisa estar entre 0 e 360")
+        if self.doa_margem_maxima_graus <= 0:
+            raise ConfiguracaoInvalida("gatilho.doa_margem_maxima_graus precisa ser positiva")
+
+
+@dataclass(frozen=True)
+class ConfigCamera:
+    tipo: str = "mock"
+    dispositivo: str | int | None = 0
+    largura: int = 1920
+    altura: int = 1080
+    aquecimento_quadros: int = 3
+    diretorio: str = "dados/capturas"
+
+    def validar(self) -> None:
+        tipos = ("mock", "opencv")
+        if self.tipo not in tipos:
+            raise ConfiguracaoInvalida(f"camera.tipo: use um de {tipos}, recebi {self.tipo!r}")
+        if self.largura < 320 or self.altura < 240:
+            raise ConfiguracaoInvalida(
+                "camera: resolução abaixo de 320x240 não lê placa a distância nenhuma"
+            )
+
+
+@dataclass(frozen=True)
 class ConfigClassificador:
     """Qual classificador de assinatura acústica o nó usa.
 
@@ -224,6 +320,9 @@ class ConfigNo:
     array: ConfigArray = field(default_factory=ConfigArray)
     sonometro: ConfigSonometro = field(default_factory=ConfigSonometro)
     classificador: ConfigClassificador = field(default_factory=ConfigClassificador)
+    gatilho: ConfigGatilho = field(default_factory=ConfigGatilho)
+    camera: ConfigCamera = field(default_factory=ConfigCamera)
+    retencao: ConfigRetencao = field(default_factory=ConfigRetencao)
     autuacao: ConfigAutuacao | None = None
 
     def validar(self) -> None:
@@ -236,6 +335,9 @@ class ConfigNo:
         self.array.validar()
         self.sonometro.validar()
         self.classificador.validar()
+        self.gatilho.validar()
+        self.camera.validar()
+        self.retencao.validar()
 
         if self.audio.canais != self.array.n_microfones:
             raise ConfiguracaoInvalida(
@@ -380,6 +482,15 @@ def de_dict(dados: dict[str, Any]) -> ConfigNo:
             ConfigClassificador, dict(dados.get("classificador") or {}), "classificador"
         )
     )
+    gatilho = ConfigGatilho(
+        **_apenas_campos(ConfigGatilho, dict(dados.get("gatilho") or {}), "gatilho")
+    )
+    camera = ConfigCamera(
+        **_apenas_campos(ConfigCamera, dict(dados.get("camera") or {}), "camera")
+    )
+    retencao = ConfigRetencao(
+        **_apenas_campos(ConfigRetencao, dict(dados.get("retencao") or {}), "retencao")
+    )
 
     autuacao = None
     bloco_autuacao = dados.get("autuacao")
@@ -417,6 +528,9 @@ def de_dict(dados: dict[str, Any]) -> ConfigNo:
         array=array,
         sonometro=sonometro,
         classificador=classificador,
+        gatilho=gatilho,
+        camera=camera,
+        retencao=retencao,
         autuacao=autuacao,
     )
     config.validar()

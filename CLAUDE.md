@@ -117,8 +117,9 @@ Antes de trabalhar em algo, ler o documento da área.
 
 ## Status atual
 
-**Fase:** construção do MVP, modo=triagem. Etapas 0 a 3 concluídas — ver a
-tabela de estado no `README.md`.
+**Fase:** construção do MVP, modo=triagem. Etapas 0 a 5 concluídas — a cadeia
+do nó está fechada do som até o pacote de evidência assinado. Ver a tabela de
+estado no `README.md`.
 
 **O que já roda:** captura de 4 canais com buffer circular de 30 s, SPL estimado
 com ponderação A, camada de adaptação do instrumento de medição, três fontes de
@@ -140,8 +141,8 @@ importa só existe depois de gravação em Bauru.
 simulação até os componentes chegarem, e a suíte de testes precisa continuar
 passando sem hardware mesmo depois disso.
 
-**Próximo passo lógico:** `edge/camera_trigger` — a tabela de decisão
-determinística que define acionar, ambíguo ou descartar.
+**Próximo passo lógico:** `backend/ingestion_api` — receber o pacote, revalidar
+o hash e criar o evento como `pendente_revisao`.
 
 
 **Pendência que não depende de código:** gravar áudio de campo nos pontos

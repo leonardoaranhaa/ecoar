@@ -123,11 +123,12 @@ def estimar(
     """
     por_canal = dbfs_por_canal(amostras, taxa_amostragem, calibracao.ponderacao)
     energia_media = float(np.mean(10.0 ** (por_canal / 10.0)))
-    dbfs = 10.0 * np.log10(max(energia_media, 1e-20))
-    dbfs = max(dbfs, PISO_DBFS)
+    # float() explícito: um np.float64 vazando daqui contamina toda comparação
+    # rio abaixo com np.bool_, que o JSON do pacote de evidência recusa.
+    dbfs = float(max(10.0 * np.log10(max(energia_media, 1e-20)), PISO_DBFS))
 
     return EstimativaSPL(
-        db=dbfs + calibracao.offset_db,
+        db=float(dbfs + calibracao.offset_db),
         dbfs=dbfs,
         ponderacao=calibracao.ponderacao,
         canal_dominante=int(np.argmax(por_canal)),
