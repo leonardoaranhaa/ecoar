@@ -352,11 +352,25 @@ inclusive, **sem instalar nada e sem internet**. Dá para mandar o link antes da
 reunião e abrir no telão ou no celular. Risco zero de travar. Limite honesto: é
 um mockup navegável com dado de exemplo, e é rotulado como tal.
 
-**Opção B — o sistema real rodando, com dado semeado.**
-É o backend + painel que já construímos (etapa 11), com 2–3 cidades e eventos
-semeados, rodando no notebook do apresentador ou num VPS. Mais convincente para
-plateia técnica (é o sistema de verdade, não desenho), mas exige subir algo e
-tem risco de demo ao vivo.
+**Opção B — o sistema real rodando, com dado semeado.** ✅ **construída.**
+É o backend + painel que já construímos (etapa 11), com 3 cidades (Bauru,
+Piracicaba, Marília — oito nós) e eventos semeados, rodando no notebook do
+apresentador ou num VPS. Mais convincente para plateia técnica (é o sistema de
+verdade, não desenho), mas exige subir algo e tem risco de demo ao vivo.
+
+O seed vive em `scripts/semear_demo.py` e a config em `config/backend.demo.yaml`:
+
+```bash
+python -m scripts.semear_demo --config config/backend.demo.yaml --recriar
+python -m backend.cli --config config/backend.demo.yaml
+# http://127.0.0.1:8000/  — token operador ou admin de config/backend.demo.yaml
+```
+
+Cada evento semeado é um pacote `.ecoar` real, enviado pela ingestão real (hash
+revalidado na entrada) e decidido pela fila de revisão real (a trilha de
+auditoria encadeia cada decisão — a demo verifica ~447 entradas íntegras). É a
+prova do multi-tenant na base: **um backend, muitas instalações**. O isolamento
+por município (login por cidade) é a fase seguinte descrita nas seções acima.
 
 **Recomendação:** levar a **Opção A** como principal — é o "paliativo e
 demonstrativo" que a reunião pede, compartilhável e à prova de falha — e ter a
