@@ -20,6 +20,7 @@ versionada. Este módulo só encadeia.
 
 from __future__ import annotations
 
+import json
 import logging
 import queue
 import threading
@@ -37,6 +38,7 @@ from edge.config import ConfigNo
 from edge.evidence_packager import montar_pacote
 from edge.geometria import ArrayCircular
 from edge.localization import Localizador
+from edge.tamper_detection import criar_detector
 from edge.uplink import ClienteBackend, FilaEnvio, Heartbeat, Remetente
 
 log = logging.getLogger("ecoar.no")
@@ -92,6 +94,19 @@ class No:
         self._remetente: Remetente | None = None
         self._heartbeat: Heartbeat | None = None
 
+        # O antifurto conhece só como capturar e como enfileirar; não conhece a
+        # câmera nem a fila diretamente.
+        self._detector = (
+            criar_detector(
+                config,
+                ao_alerta=self._enfileirar_alerta,
+                capturar_imagem=self._capturar_sob_violacao,
+                registro_local=self.diretorio_pacotes.parent / "violacoes-local.jsonl",
+            )
+            if config.tamper.habilitado
+            else None
+        )
+
     # -- ciclo de vida ---------------------------------------------------
 
     def iniciar(self, com_uplink: bool = True) -> None:
@@ -111,6 +126,9 @@ class No:
         )
         self._thread_eventos.start()
 
+        if self._detector is not None:
+            self._detector.iniciar()
+
         if com_uplink:
             cliente = ClienteBackend(self.config.uplink)
             self._remetente = Remetente(
@@ -127,6 +145,8 @@ class No:
 
     def parar(self) -> None:
         self._parar.set()
+        if self._detector is not None:
+            self._detector.parar()
         if self._thread_eventos is not None:
             self._thread_eventos.join(timeout=40.0)
             self._thread_eventos = None
@@ -275,6 +295,28 @@ class No:
         self._sequencial += 1
         marca = datetime.fromtimestamp(instante, tz=timezone.utc).strftime("%Y%m%dT%H%M%S")
         return f"{self.config.id}-{marca}-{self._sequencial:04d}"
+
+    # -- antifurto -------------------------------------------------------
+
+    def _capturar_sob_violacao(self, tipo: str) -> str | None:
+        """Fotografa antes de o equipamento sumir. A imagem vira evidência."""
+        marca = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%S")
+        destino = self.diretorio_pacotes.parent / "violacoes" / f"{tipo}-{marca}.png"
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            captura = self.acionador.camera.capturar(destino, "panoramica")
+            return captura.caminho.name
+        except Exception as erro:  # noqa: BLE001 — sem imagem, o alerta ainda vai
+            log.error("captura sob violação falhou: %s", erro)
+            return None
+
+    def _enfileirar_alerta(self, alerta) -> None:
+        """Prioridade máxima: à frente de qualquer pacote acústico pendente."""
+        self.fila.enfileirar_alerta(json.dumps(alerta.como_dict(), ensure_ascii=False))
+
+    @property
+    def detector(self):
+        return self._detector
 
     # -- apoio para bancada ----------------------------------------------
 

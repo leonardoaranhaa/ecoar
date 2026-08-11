@@ -92,6 +92,20 @@ uplink:
   heartbeat_s: 300.0
   apagar_apos_envio: true
 
+tamper:
+  # Antifurto. Limiares por sensor, para vento e vibração de tráfego não virarem
+  # alarme falso. Ver edge/tamper_detection/README.md.
+  habilitado: true
+  inercial: simulado      # simulado | mpu6050
+  abertura: simulado      # simulado | gpio
+  alimentacao: simulado   # simulado | ina219
+  pino_reed: 17
+  impacto_g: 2.5          # pico de aceleração; 1 g é só a gravidade parado
+  inclinacao_graus: 20.0  # desvio em relação à posição de instalação
+  rotacao_dps: 40.0       # rotação contínua = equipamento sendo carregado
+  intervalo_leitura_s: 0.1
+  manutencao_max_s: 1800  # o modo manutenção expira sozinho neste teto
+
 retencao:
   # Prazos por finalidade — ver docs/legal/lgpd.md. Viajam dentro de cada
   # pacote de evidência: quem recebe vê sob qual política ele foi gerado.

@@ -24,7 +24,12 @@ from pydantic import BaseModel, Field
 
 from backend import db
 from backend.armazenamento import Armazenamento
-from backend.audit_log import EVENTO_RECEBIDO, EVENTO_REJEITADO, TrilhaAuditoria
+from backend.audit_log import (
+    ALERTA_VIOLACAO,
+    EVENTO_RECEBIDO,
+    EVENTO_REJEITADO,
+    TrilhaAuditoria,
+)
 from backend.config import ConfigBackend
 from backend.seguranca import autenticar_no
 from edge.evidence_packager import verificar_pacote
@@ -42,6 +47,15 @@ class RespostaIngestao(BaseModel):
 class Heartbeat(BaseModel):
     bateria_pct: float | None = None
     detalhe: dict = Field(default_factory=dict)
+
+
+class AlertaViolacao(BaseModel):
+    tipo: str
+    timestamp: float | None = None
+    capturado_em: str | None = None
+    detalhe: dict = Field(default_factory=dict)
+    imagem: str | None = None
+    canal: str | None = None
 
 
 def criar_rotas(
@@ -169,6 +183,32 @@ def criar_rotas(
             )
         finally:
             caminho_temporario.unlink(missing_ok=True)
+
+    @rotas.post("/alertas", status_code=status.HTTP_201_CREATED)
+    def receber_alerta(dados: AlertaViolacao, no_id: str = Depends(no_autenticado)):
+        """Canal patrimonial (D14), separado dos eventos acústicos.
+
+        Não passa pela fila de revisão de fiscalização: é ocorrência
+        operacional. E vai para a trilha de auditoria como `alerta_violacao`.
+        """
+        # A trilha registra que houve violação, com o tipo e o nó — nunca placa.
+        detalhe = {k: v for k, v in dados.detalhe.items() if k.lower() not in ("placa", "condutor")}
+        with db.transacao(conexao):
+            db.registrar_no(conexao, no_id=no_id)
+            identificador = db.registrar_violacao(
+                conexao,
+                no_id=no_id,
+                tipo=dados.tipo,
+                ocorrido_em=dados.capturado_em or _agora_iso(),
+                detalhe=json.dumps(detalhe, ensure_ascii=False),
+            )
+            trilha.registrar(
+                ALERTA_VIOLACAO,
+                ator=no_id,
+                detalhe={"tipo": dados.tipo, **detalhe},
+            )
+        log.warning("VIOLAÇÃO no nó %s: %s", no_id, dados.tipo)
+        return {"status": "registrado", "id": identificador, "tipo": dados.tipo}
 
     @rotas.post("/heartbeat", status_code=status.HTTP_202_ACCEPTED)
     def receber_heartbeat(dados: Heartbeat, no_id: str = Depends(no_autenticado)):

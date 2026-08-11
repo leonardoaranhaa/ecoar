@@ -103,6 +103,24 @@ MIGRACOES: list[tuple[int, str]] = [
         CREATE INDEX idx_heartbeats_no ON heartbeats(no_id, recebido_em);
         """,
     ),
+    (
+        2,
+        # Canal separado dos eventos acústicos (D14): violação é ocorrência
+        # patrimonial, não fiscalização.
+        """
+        CREATE TABLE violacoes (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            no_id       TEXT NOT NULL,
+            tipo        TEXT NOT NULL,
+            recebido_em TEXT NOT NULL,
+            ocorrido_em TEXT NOT NULL,
+            atendido    INTEGER NOT NULL DEFAULT 0,
+            detalhe     TEXT NOT NULL DEFAULT '{}'
+        );
+        CREATE INDEX idx_violacoes_no ON violacoes(no_id, recebido_em);
+        CREATE INDEX idx_violacoes_atendido ON violacoes(atendido);
+        """,
+    ),
 ]
 
 
@@ -359,3 +377,36 @@ def listar_revisoes(conexao: sqlite3.Connection, evento: int) -> list[sqlite3.Ro
             "SELECT * FROM revisoes WHERE evento = ? ORDER BY id", (evento,)
         )
     )
+
+
+# -- violações (canal patrimonial, D14) --------------------------------
+
+
+def registrar_violacao(
+    conexao: sqlite3.Connection,
+    no_id: str,
+    tipo: str,
+    ocorrido_em: str,
+    detalhe: str,
+) -> int:
+    cursor = conexao.execute(
+        "INSERT INTO violacoes (no_id, tipo, recebido_em, ocorrido_em, detalhe) "
+        "VALUES (?, ?, datetime('now'), ?, ?)",
+        (no_id, tipo, ocorrido_em, detalhe),
+    )
+    return int(cursor.lastrowid)
+
+
+def listar_violacoes(
+    conexao: sqlite3.Connection, apenas_pendentes: bool = False, limite: int = 100
+) -> list[sqlite3.Row]:
+    onde = "WHERE atendido = 0" if apenas_pendentes else ""
+    return list(
+        conexao.execute(
+            f"SELECT * FROM violacoes {onde} ORDER BY recebido_em DESC LIMIT ?", (limite,)
+        )
+    )
+
+
+def atender_violacao(conexao: sqlite3.Connection, violacao_id: int) -> None:
+    conexao.execute("UPDATE violacoes SET atendido = 1 WHERE id = ?", (violacao_id,))

@@ -213,6 +213,36 @@ def criar_rotas(
             raise HTTPException(status_code=404, detail=str(erro))
         return Response(content=_para_audicao(bruto), media_type="audio/wav")
 
+    @rotas.get("/violacoes")
+    def violacoes(
+        apenas_pendentes: bool = False,
+        identidade: Identidade = Depends(operador_autenticado),
+    ):
+        """Canal patrimonial, separado da fila de fiscalização (D14)."""
+        import json as _json
+
+        linhas = db.listar_violacoes(conexao, apenas_pendentes=apenas_pendentes)
+        return {
+            "violacoes": [
+                {
+                    "id": linha["id"],
+                    "no_id": linha["no_id"],
+                    "tipo": linha["tipo"],
+                    "recebido_em": linha["recebido_em"],
+                    "ocorrido_em": linha["ocorrido_em"],
+                    "atendido": bool(linha["atendido"]),
+                    "detalhe": _json.loads(linha["detalhe"]),
+                }
+                for linha in linhas
+            ]
+        }
+
+    @rotas.post("/violacoes/{violacao_id}/atender")
+    def atender(violacao_id: int, identidade: Identidade = Depends(operador_autenticado)):
+        with db.transacao(conexao):
+            db.atender_violacao(conexao, violacao_id)
+        return {"status": "atendido", "id": violacao_id}
+
     @rotas.get("/nos")
     def nos(identidade: Identidade = Depends(operador_autenticado)):
         return {

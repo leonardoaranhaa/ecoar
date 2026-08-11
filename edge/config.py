@@ -172,6 +172,41 @@ class ConfigSonometro:
 
 
 @dataclass(frozen=True)
+class ConfigTamper:
+    """Antifurto. Limiares próprios por sensor, para não confundir vento e
+    vibração de tráfego com violação."""
+
+    habilitado: bool = True
+    inercial: str = "simulado"  # simulado | mpu6050
+    abertura: str = "simulado"  # simulado | gpio
+    alimentacao: str = "simulado"  # simulado | ina219
+    pino_reed: int = 17
+    impacto_g: float = 2.5
+    inclinacao_graus: float = 20.0
+    rotacao_dps: float = 40.0
+    intervalo_leitura_s: float = 0.1
+    heartbeat_s: float = 300.0
+    manutencao_max_s: float = 1800.0
+
+    def validar(self) -> None:
+        for campo, valores in (
+            ("inercial", ("simulado", "mpu6050")),
+            ("abertura", ("simulado", "gpio")),
+            ("alimentacao", ("simulado", "ina219")),
+        ):
+            if getattr(self, campo) not in valores:
+                raise ConfiguracaoInvalida(
+                    f"tamper.{campo}: use um de {valores}, recebi {getattr(self, campo)!r}"
+                )
+        if self.impacto_g <= 1.0:
+            raise ConfiguracaoInvalida(
+                "tamper.impacto_g precisa ser > 1 g (1 g é só a gravidade parado)"
+            )
+        if self.manutencao_max_s <= 0:
+            raise ConfiguracaoInvalida("tamper.manutencao_max_s precisa ser positivo")
+
+
+@dataclass(frozen=True)
 class ConfigUplink:
     """Envio ao backend. O token vem do ambiente, nunca do arquivo."""
 
@@ -367,6 +402,7 @@ class ConfigNo:
     camera: ConfigCamera = field(default_factory=ConfigCamera)
     retencao: ConfigRetencao = field(default_factory=ConfigRetencao)
     uplink: ConfigUplink = field(default_factory=ConfigUplink)
+    tamper: ConfigTamper = field(default_factory=ConfigTamper)
     autuacao: ConfigAutuacao | None = None
 
     def validar(self) -> None:
@@ -383,6 +419,7 @@ class ConfigNo:
         self.camera.validar()
         self.retencao.validar()
         self.uplink.validar()
+        self.tamper.validar()
 
         if self.audio.canais != self.array.n_microfones:
             raise ConfiguracaoInvalida(
@@ -548,6 +585,9 @@ def de_dict(dados: dict[str, Any]) -> ConfigNo:
     uplink = ConfigUplink(
         **_apenas_campos(ConfigUplink, dict(dados.get("uplink") or {}), "uplink")
     )
+    tamper = ConfigTamper(
+        **_apenas_campos(ConfigTamper, dict(dados.get("tamper") or {}), "tamper")
+    )
 
     autuacao = None
     bloco_autuacao = dados.get("autuacao")
@@ -589,6 +629,7 @@ def de_dict(dados: dict[str, Any]) -> ConfigNo:
         camera=camera,
         retencao=retencao,
         uplink=uplink,
+        tamper=tamper,
         autuacao=autuacao,
     )
     config.validar()

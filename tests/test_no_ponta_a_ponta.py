@@ -323,3 +323,55 @@ def _esperar(condicao, timeout: float) -> None:
             return
         time.sleep(0.05)
     raise AssertionError("condição não ocorreu no tempo esperado")
+
+
+def test_violacao_no_no_chega_ao_canal_patrimonial_na_frente(backend, tmp_path, monkeypatch):
+    """Antifurto de ponta a ponta: o alerta fura a fila e chega ao backend.
+
+    Simula alguém arrancando o equipamento com um pacote acústico ainda
+    pendente na fila local — o alerta precisa sair primeiro (prioridade máxima)
+    e cair no canal patrimonial, não na fila de fiscalização.
+    """
+    cliente_http, conexao = backend
+    config = config_do_no(tmp_path)
+
+    no = No(config)
+    no.acionador.abrir()
+    monkeypatch.setattr(no.captura, "janela_evento", lambda *a, **k: evento_sintetico(config))
+
+    # Um evento acústico já esperando na fila.
+    no.processar_evento(1_770_000_000.0)
+    assert no.fila.pendentes() == 1
+
+    # Agora a violação: o detector dispara um impacto.
+    no._detector._calibrar_referencia()
+    no._detector._inercial.simular_impacto()
+    disparados = no._detector.verificar_uma_vez()
+    assert any(a.tipo == "impacto" for a in disparados)
+
+    # O próximo item da fila tem que ser o alerta, não o pacote acústico.
+    from edge.uplink.fila import TIPO_ALERTA
+
+    proximo = no.fila.proximo()
+    assert proximo.tipo == TIPO_ALERTA, "o alerta precisa furar a fila"
+
+    remetente = Remetente(
+        no.fila,
+        ClienteBackend(config.uplink, cliente_http=_cliente_do_teste(cliente_http)),
+    )
+    remetente.despachar_tudo()
+
+    # O alerta caiu no canal patrimonial; a fila de fiscalização tem só o evento.
+    # Um golpe forte dispara impacto E inclinação — os dois são violação, e é o
+    # comportamento correto: o importante é que nenhum vá parar na fila acústica.
+    violacoes = cliente_http.get(
+        "/v1/violacoes", headers={"Authorization": f"Bearer {TOKEN_OPERADOR}"}
+    ).json()["violacoes"]
+    assert any(v["tipo"] == "impacto" for v in violacoes)
+
+    from backend import db as _db
+
+    assert len(_db.listar_eventos(conexao)) == 1
+
+    no.acionador.fechar()
+    no.fila.fechar()
