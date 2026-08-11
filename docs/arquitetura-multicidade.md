@@ -302,19 +302,76 @@ As etapas 8 (visão) e 9 (re-treino) do roteiro original continuam esperando
 
 ---
 
-## 10. Decisões abertas (para você fechar)
+## 10. Decisões (fechadas na revisão do PR #2)
 
-Coisas que eu **não** vou decidir sozinho, porque são de produto/negócio:
+As cinco foram respondidas. O fio condutor: **priorizar o que serve à fase de
+piloto/demonstração, até a formulação de contrato ou pivô.** Não sobre-investir
+em infra de produção antes de existir contrato.
 
-1. **Tiles do mapa:** OSM público, provedor nacional, ou servidor próprio?
-   (afeta custo, offline e "dependência externa")
-2. **Login:** sessão por cookie ou JWT? SSO com o login da prefeitura no futuro?
-3. **Isolamento:** confirmo o desenho de um-backend-multi-tenant (recomendado),
-   ou você quer instância isolada por cidade (mais simples de isolar, mais caro
-   de operar)?
-4. **Config do nó:** buscada do backend no boot (recomendado) ou continua no
-   cartão para quem não tem conectividade na instalação?
-5. **Onde hospedar:** provedor nacional específico já em mente?
+| # | Decisão | Resposta | O que fica |
+|---|---|---|---|
+| 1 | Tiles do mapa | avaliar para piloto/teste até contrato ou pivô | **Demo:** mapa esquemático self-contained (sem tile externo, offline, custo zero). **Piloto:** tiles OSM públicos (grátis, bom o suficiente). **Só se um contrato exigir** soberania/offline: tile server próprio/nacional. Nada de servidor de tiles agora. |
+| 2 | Login | simplificado por hora, para apresentação | Seletor de cidade + papel, sem senha, rotulado "demonstração". Login com senha de verdade fica para quando houver contrato. |
+| 3 | Isolamento | **multi-tenant confirmado** | Um backend só, dado carimbado por município (seção 2). |
+| 4 | Config do nó | seguir a recomendação | Buscada do backend no boot; o cartão SD não carrega segredo permanente (seção 5). |
+| 5 | Onde hospedar | sem provedor em mente; pediu sugestão demonstrativa | Ver seção 11: a demo **não precisa de hospedagem** (é self-contained e compartilhável). Para um piloto ao vivo depois da reunião, um VPS pequeno em provedor nacional basta — sem infra de produção pré-contrato. |
 
-Respondidas essas cinco, o item 1 do caminho de migração (fundação multi-tenant)
-está pronto para virar a primeira etapa de código.
+Com isso, a **seção 11** vira o próximo passo concreto (a demo), e a fase 1 do
+caminho de migração (fundação multi-tenant, seção 9) fica pronta para virar
+código quando o contrato/piloto justificar.
+
+---
+
+## 11. Demonstração para a reunião de produto
+
+O que a reunião precisa não é infra, é **algo clicável que conte a história do
+produto**: várias cidades, o mapa com os equipamentos, e o painel que a
+prefeitura usaria. Barato, sem risco de demo ao vivo travar, e honesto sobre o
+que é (demonstração, não sistema em produção).
+
+### O que mostrar (a narrativa de 5 minutos)
+
+1. **Seletor de cidade** — Bauru, Piracicaba, Marília. Prova o multi-cidade num
+   clique. (Decisão 3.)
+2. **Mapa da cidade** com um pino por equipamento, cor pelo estado. É a tela mais
+   visual e a que "vende" — mostra cobertura e onde estão os postes.
+3. **Priorização** — o mapa de calor hora×dia que já existe, com dado realista.
+   É o argumento central: "onde e quando mandar a blitz".
+4. **Fila de revisão** — abrir um evento, ouvir o áudio, ver as regras que o nó
+   avaliou, confirmar. Mostra a validação humana e a evidência auditável.
+5. **Uma frase de honestidade** em cada tela sensível: SPL sem valor legal, não
+   gera multa, dado de campo ainda não coletado. É o que dá credibilidade
+   técnica na primeira pergunta de um engenheiro da prefeitura.
+
+### Como entregar — duas opções, e a recomendação
+
+**Opção A — página de demonstração self-contained (recomendada para a reunião).**
+Um único arquivo HTML, dado realista embutido, mapa esquemático da cidade
+desenhado em SVG (sem tile externo). Abre em qualquer navegador, celular
+inclusive, **sem instalar nada e sem internet**. Dá para mandar o link antes da
+reunião e abrir no telão ou no celular. Risco zero de travar. Limite honesto: é
+um mockup navegável com dado de exemplo, e é rotulado como tal.
+
+**Opção B — o sistema real rodando, com dado semeado.**
+É o backend + painel que já construímos (etapa 11), com 2–3 cidades e eventos
+semeados, rodando no notebook do apresentador ou num VPS. Mais convincente para
+plateia técnica (é o sistema de verdade, não desenho), mas exige subir algo e
+tem risco de demo ao vivo.
+
+**Recomendação:** levar a **Opção A** como principal — é o "paliativo e
+demonstrativo" que a reunião pede, compartilhável e à prova de falha — e ter a
+**Opção B** de reserva para um aprofundamento técnico, se a conversa avançar.
+
+### O que a demo NÃO faz (para não prometer o que não há)
+
+- não lê placa, não gera multa, não mede dB com valor legal;
+- o dado é de exemplo, gerado para a demonstração — não é captura de campo;
+- o mapa da demo é esquemático; o mapa geográfico real entra no piloto.
+
+Isso não enfraquece a demo — é o que a torna defensável. O produto se vende
+justamente por **não** prometer o que não pode entregar.
+
+### Custo e prazo
+
+Opção A: sem custo de infra, e reaproveita todo o front-end já feito. É a
+próxima etapa de código natural, se você aprovar — e cabe numa sessão.
