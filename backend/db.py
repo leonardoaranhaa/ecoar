@@ -11,9 +11,27 @@ do código.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
+
+
+class _Conexao(sqlite3.Connection):
+    """Conexão com um lock de escrita próprio.
+
+    `sqlite3.Connection` não aceita atributos nem weakref; uma subclasse aceita.
+    O lock serializa as transações porque o uvicorn compartilha esta conexão
+    entre as threads do seu pool.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.lock_escrita = threading.RLock()
+
+
+def _lock_de(conexao: sqlite3.Connection) -> threading.RLock | None:
+    return getattr(conexao, "lock_escrita", None)
 
 STATUS_PENDENTE = "pendente_revisao"
 STATUS_CONFIRMADO = "confirmado"
@@ -128,7 +146,12 @@ def conectar(caminho: str | Path) -> sqlite3.Connection:
     caminho = Path(caminho)
     if str(caminho) != ":memory:":
         caminho.parent.mkdir(parents=True, exist_ok=True)
-    conexao = sqlite3.connect(caminho, check_same_thread=False)
+    # O uvicorn atende endpoints síncronos num pool de threads, todas
+    # compartilhando esta conexão. Sem serialização, dois pedidos concorrentes
+    # leem o mesmo "último seq" da trilha de auditoria e colidem na inserção. A
+    # subclasse traz um lock que serializa as transações de escrita — volume de
+    # piloto municipal não sente, e a corrida deixa de existir.
+    conexao = sqlite3.connect(caminho, check_same_thread=False, factory=_Conexao)
     conexao.row_factory = sqlite3.Row
     conexao.execute("PRAGMA foreign_keys = ON")
     conexao.execute("PRAGMA journal_mode = WAL")
@@ -164,12 +187,24 @@ def aplicar_migracoes(conexao: sqlite3.Connection) -> list[int]:
 
 @contextmanager
 def transacao(conexao: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+    """Transação serializada entre threads.
+
+    O lock precisa envolver a leitura e a escrita: a trilha de auditoria calcula
+    o próximo `seq` lendo o último, e liberar o lock entre a leitura e o commit
+    deixaria dois pedidos concorrentes escolherem o mesmo número.
+    """
+    lock = _lock_de(conexao)
+    if lock is not None:
+        lock.acquire()
     try:
         yield conexao
         conexao.commit()
     except Exception:
         conexao.rollback()
         raise
+    finally:
+        if lock is not None:
+            lock.release()
 
 
 # -- nós ---------------------------------------------------------------
@@ -410,3 +445,118 @@ def listar_violacoes(
 
 def atender_violacao(conexao: sqlite3.Connection, violacao_id: int) -> None:
     conexao.execute("UPDATE violacoes SET atendido = 1 WHERE id = ?", (violacao_id,))
+
+
+# -- priorização e métricas (modo=triagem) -----------------------------
+
+# Só evento CONFIRMADO por humano entra na priorização (D2): um evento
+# pendente ou rejeitado não é ocorrência comprovada, e priorizar sobre ele
+# mandaria a fiscalização para o lugar errado.
+_STATUS_CONFIRMADOS = (STATUS_CONFIRMADO, STATUS_CONFIRMADO_MULTA)
+
+
+def priorizacao_hora_dia(conexao: sqlite3.Connection) -> list[dict]:
+    """Mapa de calor: quantos eventos confirmados por dia da semana × hora.
+
+    É o entregável central em modo de triagem — responde "onde e quando",
+    para a prefeitura mandar a blitz na hora que rende.
+    """
+    marcadores = ",".join("?" * len(_STATUS_CONFIRMADOS))
+    linhas = conexao.execute(
+        f"""
+        SELECT CAST(strftime('%w', capturado_em) AS INTEGER) AS dia,
+               CAST(strftime('%H', capturado_em) AS INTEGER) AS hora,
+               COUNT(*) AS total
+          FROM eventos
+         WHERE status IN ({marcadores})
+         GROUP BY dia, hora
+        """,
+        _STATUS_CONFIRMADOS,
+    )
+    return [dict(linha) for linha in linhas]
+
+
+def priorizacao_por_no(conexao: sqlite3.Connection) -> list[dict]:
+    """Ranking de pontos por eventos confirmados, com a geolocalização do nó."""
+    marcadores = ",".join("?" * len(_STATUS_CONFIRMADOS))
+    linhas = conexao.execute(
+        f"""
+        SELECT e.no_id AS no_id,
+               n.descricao AS descricao,
+               n.latitude AS latitude,
+               n.longitude AS longitude,
+               COUNT(*) AS confirmados,
+               MAX(e.capturado_em) AS ultimo
+          FROM eventos e
+          LEFT JOIN nos n ON n.no_id = e.no_id
+         WHERE e.status IN ({marcadores})
+         GROUP BY e.no_id
+         ORDER BY confirmados DESC
+        """,
+        _STATUS_CONFIRMADOS,
+    )
+    return [dict(linha) for linha in linhas]
+
+
+def eventos_por_dia(conexao: sqlite3.Connection, dias: int = 30) -> list[dict]:
+    linhas = conexao.execute(
+        """
+        SELECT date(capturado_em) AS dia,
+               SUM(CASE WHEN status IN ('confirmado','confirmado_multa') THEN 1 ELSE 0 END) AS confirmados,
+               SUM(CASE WHEN status = 'rejeitado' THEN 1 ELSE 0 END) AS rejeitados,
+               COUNT(*) AS total
+          FROM eventos
+         GROUP BY dia
+         ORDER BY dia DESC
+         LIMIT ?
+        """,
+        (dias,),
+    )
+    return [dict(linha) for linha in linhas]
+
+
+def taxa_de_rejeicao(conexao: sqlite3.Connection) -> dict:
+    """Rejeitados sobre decididos — a taxa de falso positivo do sistema.
+
+    Só conta o que já foi revisado: um evento pendente ainda não é acerto nem
+    erro. Dividir pelo total incluindo pendentes subestimaria a taxa.
+    """
+    linha = conexao.execute(
+        """
+        SELECT
+            SUM(CASE WHEN status IN ('confirmado','confirmado_multa') THEN 1 ELSE 0 END) AS confirmados,
+            SUM(CASE WHEN status = 'rejeitado' THEN 1 ELSE 0 END) AS rejeitados,
+            SUM(CASE WHEN status = 'pendente_revisao' THEN 1 ELSE 0 END) AS pendentes
+          FROM eventos
+        """
+    ).fetchone()
+    confirmados = linha["confirmados"] or 0
+    rejeitados = linha["rejeitados"] or 0
+    decididos = confirmados + rejeitados
+    return {
+        "confirmados": confirmados,
+        "rejeitados": rejeitados,
+        "pendentes": linha["pendentes"] or 0,
+        "decididos": decididos,
+        "taxa_rejeicao": round(rejeitados / decididos, 4) if decididos else None,
+    }
+
+
+def versoes_de_modelo(conexao: sqlite3.Connection) -> list[dict]:
+    """Versões de classificador vistas nos eventos, com quantos eventos cada uma.
+
+    Enquanto o pipeline de re-treino (etapa 9) não existe, esta é a visão
+    honesta de "quais modelos rodaram": derivada do que a evidência registrou,
+    não de um catálogo inventado.
+    """
+    linhas = conexao.execute(
+        """
+        SELECT versao_modelo AS versao, COUNT(*) AS eventos,
+               MIN(capturado_em) AS primeiro, MAX(capturado_em) AS ultimo
+          FROM eventos
+         WHERE versao_modelo IS NOT NULL
+         GROUP BY versao_modelo
+         ORDER BY ultimo DESC
+        """
+    )
+    return [dict(linha) for linha in linhas]

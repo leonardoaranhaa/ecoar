@@ -210,3 +210,27 @@ def test_endpoint_de_verificacao_denuncia_adulteracao(ambiente):
     corpo = cliente.get("/v1/auditoria/verificar", headers=como(TOKEN_ADMIN)).json()
     assert corpo["integra"] is False
     assert corpo["problemas"]
+
+
+def test_escritas_concorrentes_na_trilha_nao_colidem(ambiente):
+    """Bug real achado no navegador: <img> busca placa.png e panoramica.png ao
+    mesmo tempo, e as duas gravam acesso_evidencia. Sem serialização, colidiam
+    no mesmo seq e uma virava 500 para o operador."""
+    import concurrent.futures as cf
+
+    cliente, conexao, tmp_path = ambiente
+    pacote = gerar_pacote(tmp_path / "evt.ecoar")
+    with open(pacote, "rb") as arquivo:
+        ident = cliente.post(
+            "/v1/eventos", files={"pacote": (pacote.name, arquivo)}, headers=como(TOKEN_NO)
+        ).json()["id"]
+
+    def abrir(nome):
+        return cliente.get(f"/v1/eventos/{ident}/midia/{nome}", headers=como(TOKEN_OPERADOR))
+
+    nomes = ["placa.png", "panoramica.png"] * 8
+    with cf.ThreadPoolExecutor(max_workers=8) as executor:
+        respostas = list(executor.map(abrir, nomes))
+
+    assert all(r.status_code == 200 for r in respostas), "nenhum acesso pode dar 500"
+    assert TrilhaAuditoria(conexao).verificar().integra

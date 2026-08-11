@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ECOAR — fila de revisão</title>
+  <title>ECOAR — plataforma de gestão</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%224%22 fill=%22%23FF6B35%22/%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2210%22 fill=%22none%22 stroke=%22%23F5A623%22 stroke-width=%222%22/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/estilo.css">
 </head>
@@ -25,43 +25,19 @@
 </div>
 
 <div id="painel" hidden>
-  <header class="cabecalho">
-    <div class="identidade">
+  <aside class="lateral">
+    <div class="marca-lateral">
       <span class="marca-pequena">ECOAR</span>
       <span class="selo-modo" id="selo-modo">triagem</span>
     </div>
-    <nav class="contadores" id="contadores"></nav>
-    <div class="acoes-cabecalho">
-      <button class="secundario" id="atualizar">Atualizar</button>
+    <nav class="navegacao" id="navegacao"></nav>
+    <div class="rodape-lateral">
+      <span class="quem" id="quem"></span>
       <button class="secundario" id="sair">Sair</button>
     </div>
-  </header>
+  </aside>
 
-  <main class="conteudo">
-    <section class="coluna-fila">
-      <div class="filtro">
-        <label for="filtro-status">Mostrar</label>
-        <select id="filtro-status">
-          <option value="pendente_revisao">Pendentes de revisão</option>
-          <option value="confirmado">Confirmados</option>
-          <option value="rejeitado">Rejeitados</option>
-          <option value="">Todos</option>
-        </select>
-      </div>
-      <ul class="lista-eventos" id="lista"></ul>
-      <p class="vazio" id="vazio" hidden>Nenhum evento nesta faixa.</p>
-    </section>
-
-    <section class="coluna-detalhe" id="detalhe">
-      <div class="placeholder">
-        <p>Selecione um evento na fila.</p>
-        <p class="dica">
-          Todo evento passa por decisão humana antes de virar dado de
-          priorização. Nenhum é contado sozinho.
-        </p>
-      </div>
-    </section>
-  </main>
+  <main class="conteudo" id="conteudo"></main>
 </div>
 
 <script src="/painel.js"></script>

@@ -104,7 +104,7 @@ Construção por etapas, conforme `01-tecnico/prompts-claude-code.md` do projeto
 | 8 | `vision/` | pendente |
 | 9 | `backend/training_pipeline` | pendente |
 | 10 | `backend/audit_log` | **feito** |
-| 11 | Plataforma de gestão completa | pendente |
+| 11 | Plataforma de gestão completa | **feito** |
 | 12 | `edge/tamper_detection` | **feito** |
 
 ## Antes de mexer no código

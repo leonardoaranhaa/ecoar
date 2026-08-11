@@ -141,9 +141,11 @@ importa só existe depois de gravação em Bauru.
 simulação até os componentes chegarem, e a suíte de testes precisa continuar
 passando sem hardware mesmo depois disso.
 
-**Próximo passo lógico:** `edge/tamper_detection` (etapa 12) e a trilha de
-auditoria encadeada (etapa 10). As etapas 8 (visão) e 9 (re-treino) dependem de
-dado de campo real que ainda não existe.
+**Próximo passo lógico:** etapas 8 (visão) e 9 (re-treino), que **dependem de
+dado de campo real que ainda não existe** — o roteiro é explícito que a visão
+só entra depois da parte de áudio validada em campo, e o re-treino só depois de
+volume de eventos confirmados. Construí-las agora seria código não validável.
+Todas as demais etapas do roteiro (0 a 7, 10, 11, 12) estão feitas.
 
 **Ensaio de bancada da cadeia inteira:**
 

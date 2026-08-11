@@ -1,30 +1,50 @@
-# dashboard/ — painel do operador
+# dashboard/ — plataforma de gestão
 
 Interface web servida pelo próprio backend. Sem etapa de build: HTML + CSS + JS.
-
-## Dois perfis
-
-| Perfil | O que vê e faz |
-|---|---|
-| Operador municipal | priorização, fila de revisão, histórico, exportação de relatório |
-| Admin | tudo do operador + gestão de nós, versões de modelo, auditoria completa, alternância de modo |
+Dependência de node no município é atrito que não paga.
 
 ## Telas
 
-1. **Priorização** — tela inicial. Mapa de calor de onde e quando há mais
-   ocorrências confirmadas, cruzado por hora do dia e dia da semana. É o
-   entregável central em `modo=triagem`, e por isso vem antes da fila de
-   revisão na hierarquia visual.
-2. **Fila de revisão** — áudio, imagem, ângulo e score lado a lado, com
-   confirmar/rejeitar.
-3. **Nós** — status de cada sensor: online/offline, bateria, última captura,
-   alertas de violação.
-4. **Histórico** — busca e filtro de eventos já decididos.
-5. **Métricas** — eventos por dia e local, taxa de rejeição ao longo do tempo.
-6. **Modelo** — versões do classificador, performance de cada uma, reversão.
-7. **Auditoria** — cadeia de hash com indicador claro de integridade.
-8. **Configurações** — limiares, calibração por sensor, retenção, usuários e o
-   alternador de modo (só admin).
+| Tela | Quem vê | O que faz |
+|---|---|---|
+| **Priorização** (home) | todos | mapa de calor hora × dia da semana + ranking de pontos, sobre eventos **confirmados**. O entregável central em modo de triagem, e por isso a home |
+| Fila de revisão | todos | áudio, imagem, ângulo, score e as regras avaliadas pelo nó, com confirmar/rejeitar |
+| Nós | todos | online/sem sinal (15 min sem heartbeat), bateria, pendentes, último contato |
+| Violações | todos | canal patrimonial, separado da fiscalização (D14) |
+| Histórico | todos | eventos já decididos, com filtro por status |
+| Métricas | todos | volume por dia, taxa de rejeição na revisão |
+| Modelo | **admin** | versões de classificador vistas na evidência |
+| Auditoria | **admin** | cadeia de hash com indicador de integridade |
+| Configurações | todos | modo por nó, e por que a autuação está bloqueada |
+
+## RBAC em duas camadas
+
+O menu esconde Modelo e Auditoria de quem não é admin — **e o backend recusa de
+novo** (403) mesmo que o endpoint seja chamado direto. A garantia mora no
+backend; o menu é só conveniência. `GET /v1/eu` diz ao painel quem está logado.
+
+## Priorização é o produto em triagem
+
+O mapa de calor responde "onde e quando", que é o que a prefeitura leva para a
+equipe de blitz. Só entra evento **confirmado por operador** (D2): priorizar
+sobre evento pendente ou rejeitado mandaria a fiscalização para o lugar errado.
+
+O botão de exportação gera um relatório HTML pronto para imprimir em PDF — sem
+biblioteca de PDF no servidor, o operador imprime pelo navegador. O relatório
+carrega as ressalvas jurídicas: baseado em confirmações humanas, não constitui
+auto de infração, SPL sem valor legal.
+
+## O que a tela de configurações honestamente não faz
+
+Limiar, calibração de SPL e geometria do array **não** são editáveis pelo
+painel: vivem na configuração de cada nó, porque são por nó (uma via de tráfego
+pesado tem piso de ruído diferente de uma rua residencial), e mudá-las
+remotamente sem registro quebraria a reprodutibilidade da decisão.
+
+E **não há botão de ligar a autuação**. O modo é declarado na configuração do
+nó, exige instrumento certificado e base normativa federal que não existe hoje.
+Apresentar um toggle aqui seria prometer o que o sistema não entrega — a tela
+mostra o modo vigente e explica o bloqueio, com link para `docs/legal/inmetro.md`.
 
 ## Identidade visual
 
@@ -36,10 +56,15 @@ Interface web servida pelo próprio backend. Sem etapa de build: HTML + CSS + JS
 
 | Cor | Hex | Uso |
 |---|---|---|
-| Âmbar | `#F5A623` | pendente de revisão — evita vermelho, que sugere culpa antes da validação |
+| Âmbar | `#F5A623` | pendente — evita vermelho, que sugere culpa antes da validação |
 | Verde | `#2ECC71` | confirmado |
 | Laranja Studio Cerne | `#FF6B35` | assinatura de marca, com moderação |
 | Base | escuro editorial | seriedade institucional |
 
-Interface densa em informação e legível. É ferramenta de uso diário de operador
-municipal, não landing page.
+## Detalhe que não é detalhe
+
+Todo texto vindo da API é escapado antes de entrar no HTML — os campos passam
+pelo nó e por observação de operador, e nenhum dos dois é lugar de confiar
+cegamente. A mídia é buscada por `fetch` com o token e entregue como blob:
+`<img>` e `<audio>` não enviam cabeçalho de autenticação, e assinar a URL
+colocaria credencial no histórico do navegador e no log do servidor.

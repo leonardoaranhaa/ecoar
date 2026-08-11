@@ -58,6 +58,11 @@ def criar_rotas(
     rotas = APIRouter(prefix="/v1", tags=["revisão"])
     operador_autenticado = autenticar_operador(config)
 
+    @rotas.get("/eu")
+    def eu(identidade: Identidade = Depends(operador_autenticado)):
+        """Quem está logado. O painel usa isto para o controle de acesso."""
+        return {"nome": identidade.nome, "perfil": identidade.perfil, "admin": identidade.e_admin}
+
     @rotas.get("/eventos")
     def listar(
         status_filtro: str | None = Query(default=None, alias="status"),

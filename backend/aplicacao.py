@@ -13,6 +13,7 @@ from backend.armazenamento import Armazenamento
 from backend.audit_log.rotas import criar_rotas as rotas_de_auditoria
 from backend.audit_log.trilha import TrilhaAuditoria
 from backend.config import ConfigBackend, carregar
+from backend.gestao.rotas import criar_rotas as rotas_de_gestao
 from backend.ingestion_api.app import criar_rotas as rotas_de_ingestao
 from backend.review_queue.rotas import criar_rotas as rotas_de_revisao
 
@@ -43,6 +44,7 @@ def criar_app(config: ConfigBackend) -> FastAPI:
     app.include_router(rotas_de_ingestao(config, conexao, armazenamento, trilha))
     app.include_router(rotas_de_revisao(config, conexao, armazenamento, trilha))
     app.include_router(rotas_de_auditoria(config, trilha))
+    app.include_router(rotas_de_gestao(config, conexao))
 
     @app.get("/v1/saude", tags=["operação"])
     def saude():
