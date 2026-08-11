@@ -172,6 +172,41 @@ class ConfigSonometro:
 
 
 @dataclass(frozen=True)
+class ConfigUplink:
+    """Envio ao backend. O token vem do ambiente, nunca do arquivo."""
+
+    url: str = "http://127.0.0.1:8000"
+    token: str = ""
+    fila: str = "dados/fila-uplink.db"
+    intervalo_s: float = 2.0
+    timeout_s: float = 30.0
+    tentativas_maximas: int = 12
+    heartbeat_s: float = 300.0
+    apagar_apos_envio: bool = True
+    diretorio_pacotes: str = "dados/pacotes"
+
+    def validar(self) -> None:
+        if not self.url.startswith(("http://", "https://")):
+            raise ConfiguracaoInvalida(f"uplink.url inválida: {self.url!r}")
+        if self.url.startswith("http://") and not _e_local(self.url):
+            raise ConfiguracaoInvalida(
+                "uplink.url: HTTP sem TLS só é aceito para endereço local. Um nó "
+                "em poste transmite por 4G, e evidência não trafega em claro."
+            )
+        if self.intervalo_s <= 0 or self.timeout_s <= 0:
+            raise ConfiguracaoInvalida("uplink: intervalo e timeout precisam ser positivos")
+        if self.heartbeat_s < 30:
+            raise ConfiguracaoInvalida(
+                "uplink.heartbeat_s abaixo de 30 s gasta rádio e bateria sem ganho"
+            )
+
+
+def _e_local(url: str) -> bool:
+    resto = url.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0]
+    return resto in ("localhost", "127.0.0.1", "::1") or resto.startswith("192.168.")
+
+
+@dataclass(frozen=True)
 class ConfigRetencao:
     """Prazos por finalidade — ver docs/legal/lgpd.md.
 
@@ -233,6 +268,8 @@ class ConfigGatilho:
     doa_margem_maxima_graus: float = 15.0
     azimute_camera_graus: float = 0.0
     campo_visao_graus: float = 90.0
+    janela_antes_s: float = 10.0
+    janela_depois_s: float = 10.0
 
     def validar(self) -> None:
         if not 0.0 < self.score_ambiguo < self.score_aciona <= 1.0:
@@ -246,6 +283,12 @@ class ConfigGatilho:
             raise ConfiguracaoInvalida("gatilho.campo_visao_graus precisa estar entre 0 e 360")
         if self.doa_margem_maxima_graus <= 0:
             raise ConfiguracaoInvalida("gatilho.doa_margem_maxima_graus precisa ser positiva")
+        if self.janela_antes_s <= 0 or self.janela_depois_s <= 0:
+            raise ConfiguracaoInvalida("gatilho: a janela do evento precisa ser positiva")
+
+    @property
+    def janela_total_s(self) -> float:
+        return self.janela_antes_s + self.janela_depois_s
 
 
 @dataclass(frozen=True)
@@ -323,6 +366,7 @@ class ConfigNo:
     gatilho: ConfigGatilho = field(default_factory=ConfigGatilho)
     camera: ConfigCamera = field(default_factory=ConfigCamera)
     retencao: ConfigRetencao = field(default_factory=ConfigRetencao)
+    uplink: ConfigUplink = field(default_factory=ConfigUplink)
     autuacao: ConfigAutuacao | None = None
 
     def validar(self) -> None:
@@ -338,12 +382,22 @@ class ConfigNo:
         self.gatilho.validar()
         self.camera.validar()
         self.retencao.validar()
+        self.uplink.validar()
 
         if self.audio.canais != self.array.n_microfones:
             raise ConfiguracaoInvalida(
                 f"audio.canais ({self.audio.canais}) difere de array.n_microfones "
                 f"({self.array.n_microfones}) — a localização direcional produziria "
                 "ângulo errado sem avisar"
+            )
+
+        folga = 2.0
+        if self.audio.buffer_segundos < self.gatilho.janela_total_s + folga:
+            raise ConfiguracaoInvalida(
+                f"audio.buffer_segundos ({self.audio.buffer_segundos:.0f} s) nao cobre a "
+                f"janela do evento ({self.gatilho.janela_total_s:.0f} s) com folga de "
+                f"{folga:.0f} s. O trecho anterior ao pico ja teria saido do anel quando "
+                "o sistema fosse busca-lo — e o evento chegaria truncado, sem aviso."
             )
 
         if self.modo == MODO_AUTUACAO:
@@ -491,6 +545,9 @@ def de_dict(dados: dict[str, Any]) -> ConfigNo:
     retencao = ConfigRetencao(
         **_apenas_campos(ConfigRetencao, dict(dados.get("retencao") or {}), "retencao")
     )
+    uplink = ConfigUplink(
+        **_apenas_campos(ConfigUplink, dict(dados.get("uplink") or {}), "uplink")
+    )
 
     autuacao = None
     bloco_autuacao = dados.get("autuacao")
@@ -531,6 +588,7 @@ def de_dict(dados: dict[str, Any]) -> ConfigNo:
         gatilho=gatilho,
         camera=camera,
         retencao=retencao,
+        uplink=uplink,
         autuacao=autuacao,
     )
     config.validar()

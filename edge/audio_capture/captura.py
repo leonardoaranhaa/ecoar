@@ -42,6 +42,17 @@ class JanelaEvento:
     instante_pico: float
     sonometro: LeituraSonometro | None
     motivo_sem_sonometro: str | None
+    antes_pedido_s: float = ANTES_PADRAO_S
+    depois_pedido_s: float = DEPOIS_PADRAO_S
+
+    @property
+    def antes_obtido_s(self) -> float:
+        return self.instante_pico - self.janela.inicio
+
+    @property
+    def truncado(self) -> bool:
+        """Faltou pré-registro — normal logo após o nó subir, e declarado."""
+        return self.antes_obtido_s < self.antes_pedido_s - 0.05
 
     @property
     def amostras(self) -> np.ndarray:
@@ -59,6 +70,11 @@ class JanelaEvento:
             "duracao_s": round(self.janela.duracao_s, 3),
             "taxa_amostragem": self.janela.taxa_amostragem,
             "canais": self.janela.canais,
+            "pre_registro_s": {
+                "pedido": round(self.antes_pedido_s, 2),
+                "obtido": round(self.antes_obtido_s, 2),
+                "truncado": self.truncado,
+            },
             "spl_estimado": self.spl.como_dict(),
             "medicao_instrumento": (
                 self.sonometro.como_dict() if self.sonometro else None
@@ -229,16 +245,29 @@ class CapturaAudio:
                 f"(faltavam {depois:.1f} s após o pico)"
             )
 
-        janela = self.buffer.janela(instante_pico - antes, fim)
+        # Trunca em vez de perder: um pré-registro menor que o pedido continua
+        # sendo evidência, e o quanto faltou vai declarado no pacote.
+        janela = self.buffer.janela(instante_pico - antes, fim, truncar=True)
         spl = estimar(janela.amostras, janela.taxa_amostragem, self.config.audio.calibracao)
         leitura, motivo = self.ler_sonometro()
-        return JanelaEvento(
+
+        evento = JanelaEvento(
             janela=janela,
             spl=spl,
             instante_pico=instante_pico,
             sonometro=leitura,
             motivo_sem_sonometro=motivo,
+            antes_pedido_s=antes,
+            depois_pedido_s=depois,
         )
+        if evento.truncado:
+            log.warning(
+                "evento em %.3f: pré-registro de %.1f s em vez dos %.1f s pedidos",
+                instante_pico,
+                evento.antes_obtido_s,
+                antes,
+            )
+        return evento
 
     def ultimos(self, segundos: float) -> Janela:
         return self.buffer.ultimos(segundos)

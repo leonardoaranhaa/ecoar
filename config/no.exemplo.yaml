@@ -64,6 +64,10 @@ gatilho:
   doa_margem_maxima_graus: 15.0
   azimute_camera_graus: 0.0    # para onde a câmera aponta, na convenção do array
   campo_visao_graus: 90.0
+  # Janela do evento. audio.buffer_segundos precisa cobrir a soma, com folga —
+  # o carregador recusa a configuracao se nao cobrir.
+  janela_antes_s: 10.0
+  janela_depois_s: 10.0
 
 camera:
   tipo: mock                   # mock | opencv
@@ -72,6 +76,21 @@ camera:
   altura: 1080
   aquecimento_quadros: 3       # os primeiros quadros saem com exposição errada
   diretorio: "dados/capturas"
+
+uplink:
+  # Endereço do backend. HTTP sem TLS só é aceito para endereço local: um nó em
+  # poste transmite por 4G, e evidência não trafega em claro.
+  url: "https://ecoar.exemplo.br"
+  # Vazio no exemplo para o arquivo carregar sem variável definida. O nó recusa
+  # subir com token vazio quando o uplink está ligado.
+  token: "${ECOAR_TOKEN_NO:-}"
+  fila: "dados/fila-uplink.db"
+  diretorio_pacotes: "dados/pacotes"
+  intervalo_s: 2.0
+  timeout_s: 30.0
+  tentativas_maximas: 12
+  heartbeat_s: 300.0
+  apagar_apos_envio: true
 
 retencao:
   # Prazos por finalidade — ver docs/legal/lgpd.md. Viajam dentro de cada

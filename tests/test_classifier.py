@@ -248,3 +248,26 @@ def test_escapamento_atenuado_e_ruidoso_ainda_nao_vira_buzina():
     predicao = ClassificadorHeuristico().classificar(degradado[:, None], TAXA)
 
     assert predicao.scores["buzina"] < 0.25
+
+
+@pytest.mark.parametrize("taxa", [8000, 16000, 44100, 48000])
+def test_descritores_nao_dependem_da_taxa_de_amostragem(taxa):
+    """Um nó a 16 kHz precisa medir o mesmo som que um nó a 48 kHz.
+
+    Com a envoltória amostrada a um salto fixo em amostras, o mesmo escapamento
+    media 47 impulsos por segundo a 48 kHz e 5 a 16 kHz — e o classificador se
+    comportava de forma diferente em cada nó, sem ninguém perceber.
+    """
+    from edge.audio_capture.sintetico import CenaSintetica
+
+    geradora = CenaSintetica(ARRAY, taxa_amostragem=taxa, perfil="escapamento")
+    amostras = geradora.bloco(taxa * 3, indice_inicial=int(2.5 * taxa))
+
+    descritores = extrair_descritores(amostras, taxa)
+    predicao = ClassificadorHeuristico().classificar(amostras, taxa)
+
+    assert descritores.f0_hz == pytest.approx(84.0, abs=3.0)
+    assert descritores.taxa_impulsos_hz == pytest.approx(46.0, rel=0.15)
+    assert descritores.crista == pytest.approx(2.6, rel=0.15)
+    assert predicao.classe == CLASSE_ALVO
+    assert predicao.score_alvo == pytest.approx(0.69, abs=0.05)

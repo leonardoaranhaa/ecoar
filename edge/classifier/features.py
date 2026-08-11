@@ -29,10 +29,14 @@ N_MELS = 48
 MEL_MIN_HZ = 40.0
 MEL_MAX_HZ = 8000.0
 
-# Envelope com salto curto: a modulação que caracteriza escapamento chega a
-# 60 Hz, e um envelope amostrado a 94 Hz (salto de 512) não a enxergaria.
-SALTO_ENVELOPE = 128
-JANELA_ENVELOPE = 256
+# A envoltória é amostrada a uma taxa FIXA EM TEMPO, não a um salto fixo em
+# amostras. Parece detalhe e não é: com salto fixo, um nó configurado a 16 kHz
+# mediria 5 impulsos por segundo no mesmo som em que um nó a 48 kHz mede 47, e
+# o classificador se comportaria de forma diferente em cada nó sem ninguém
+# perceber. Descritor físico não pode depender da taxa de amostragem.
+#
+# 375 Hz cobre com folga a modulação de até 60 Hz que caracteriza escapamento.
+TAXA_ENVELOPE_HZ = 375.0
 
 SEGUNDOS_ANALISE = 3.0
 
@@ -116,10 +120,12 @@ def log_mel(
     return em_db - em_db.max()
 
 
-def envelope(sinal: np.ndarray, salto: int = SALTO_ENVELOPE, janela: int = JANELA_ENVELOPE):
-    """Envoltória de energia e a taxa em que ela foi amostrada."""
+def envelope(sinal: np.ndarray, taxa_amostragem: int) -> tuple[np.ndarray, float]:
+    """Envoltória de energia e a taxa efetiva em que ela foi amostrada."""
+    salto = max(1, int(round(taxa_amostragem / TAXA_ENVELOPE_HZ)))
+    janela = max(8, 2 * salto)
     quadros = enquadrar(sinal, janela, salto)
-    return np.sqrt(np.mean(quadros**2, axis=1)), salto
+    return np.sqrt(np.mean(quadros**2, axis=1)), taxa_amostragem / salto
 
 
 @dataclass(frozen=True)
@@ -227,8 +233,7 @@ def extrair_descritores(
         np.exp(np.mean(np.log(espectro + EPS))) / (np.mean(espectro) + EPS)
     )
 
-    env, salto = envelope(x)
-    taxa_env = taxa_amostragem / salto
+    env, taxa_env = envelope(x, taxa_amostragem)
     env_media = float(np.mean(env)) + EPS
     crista = float(np.max(env) / env_media)
 

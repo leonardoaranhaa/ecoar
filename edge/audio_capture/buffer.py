@@ -147,8 +147,14 @@ class BufferCircular:
 
     # -- leitura ---------------------------------------------------------
 
-    def janela(self, inicio: float, fim: float) -> Janela:
-        """Extrai o trecho [inicio, fim). Erro se saiu do anel ou ainda não chegou."""
+    def janela(self, inicio: float, fim: float, truncar: bool = False) -> Janela:
+        """Extrai o trecho [inicio, fim).
+
+        Com `truncar=True`, um começo anterior ao que o buffer tem é encurtado
+        em vez de virar erro. É o que se quer num evento: um pré-registro de
+        3 s em vez de 10 s ainda é evidência; perder o evento inteiro porque o
+        nó tinha acabado de subir, não.
+        """
         if fim <= inicio:
             raise ValueError("fim precisa ser maior que inicio")
 
@@ -161,11 +167,21 @@ class BufferCircular:
             mais_antigo = max(0, self._total - self.capacidade)
 
             if i0 < mais_antigo:
-                idade = (self._tempo_de(mais_antigo) - inicio)
-                raise JanelaIndisponivel(
-                    f"trecho pedido saiu do buffer há {idade:.2f} s — aumente "
-                    "audio.buffer_segundos ou reduza a latência da cadeia"
-                )
+                if truncar:
+                    i0 = mais_antigo
+                    if i1 <= i0:
+                        raise JanelaIndisponivel(
+                            "o trecho inteiro é anterior ao que o buffer retém"
+                        )
+                else:
+                    idade = self._tempo_de(mais_antigo) - inicio
+                    faltou = "nunca chegou a ser capturado" if self._total < self.capacidade else (
+                        f"saiu do buffer há {idade:.2f} s"
+                    )
+                    raise JanelaIndisponivel(
+                        f"trecho pedido {faltou} — aumente audio.buffer_segundos, "
+                        "reduza a latência da cadeia, ou peça a janela com truncar=True"
+                    )
             if i1 > self._total:
                 falta = (fim - self._tempo_de(self._total))
                 raise JanelaIndisponivel(

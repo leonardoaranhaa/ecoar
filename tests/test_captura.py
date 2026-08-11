@@ -60,7 +60,7 @@ def test_evento_registra_ausencia_de_instrumento_sem_inventar_valor(config):
 def test_evento_inclui_leitura_quando_ha_instrumento(tmp_path):
     taxa = 16000
     caminho = escrever_wav(tmp_path / "curto.wav", np.zeros((taxa * 3, 4), np.float32), taxa)
-    config = _config_wav(caminho, buffer_segundos=5, bloco_amostras=1024)
+    config = _config_wav(caminho, buffer_segundos=8, bloco_amostras=1024)
 
     captura = CapturaAudio(config, sonometro=SonometroMock(valores=[77.5]))
     with captura:

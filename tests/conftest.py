@@ -18,12 +18,15 @@ def config_base(**sobrescritas) -> dict:
         "audio": {
             "taxa_amostragem": 16000,
             "canais": 4,
-            "buffer_segundos": 5,
+            "buffer_segundos": 8,
             "bloco_amostras": 1024,
             "fonte": {"tipo": "sintetica", "tempo_real": False, "perfil": "escapamento"},
             "calibracao": {"offset_db": 94.0, "ponderacao": "A", "referencia": "teste"},
         },
         "array": {"raio_m": 0.045, "n_microfones": 4},
+        # Janela curta para os testes rodarem rápido; em campo são 10 s + 10 s.
+        # O carregador exige que o buffer cubra a soma com folga.
+        "gatilho": {"janela_antes_s": 2.0, "janela_depois_s": 2.0},
         "sonometro": {"tipo": "ausente"},
     }
     dados.update(sobrescritas)

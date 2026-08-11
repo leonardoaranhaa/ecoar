@@ -180,6 +180,11 @@ def _montar_manifesto(
             "inicio_epoch": evento.janela.inicio,
             "fim_epoch": evento.janela.fim,
             "duracao_s": round(evento.janela.duracao_s, 3),
+            "pre_registro_s": {
+                "pedido": round(evento.antes_pedido_s, 2),
+                "obtido": round(evento.antes_obtido_s, 2),
+                "truncado": evento.truncado,
+            },
         },
         "spl_estimado": evento.spl.como_dict(),
         "medicao_instrumento": (

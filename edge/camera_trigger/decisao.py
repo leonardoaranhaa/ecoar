@@ -179,7 +179,7 @@ def decidir(
     if score >= politica.score_ambiguo:
         nao_atendidas = [regra.nome for regra in regras if not regra.atendida]
         return _ambiguo(
-            "score compatível, mas " + "; ".join(nao_atendidas),
+            "score compatível com revisão, mas não atendeu: " + "; ".join(nao_atendidas),
             politica,
             tuple(regras),
             dentro=dentro_do_campo,
