@@ -17,3 +17,6 @@ dados/
 *.pt
 !tests/dados/*.wav
 docs/field-notes/audio/
+
+# Retrato gerado da demo (embutido em demo/index.html; regenerável)
+demo/dados-demo.js
