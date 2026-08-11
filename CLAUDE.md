@@ -117,18 +117,24 @@ Antes de trabalhar em algo, ler o documento da área.
 
 ## Status atual
 
-**Fase:** construção do MVP, modo=triagem. Etapas 0 a 2 concluídas — ver a
+**Fase:** construção do MVP, modo=triagem. Etapas 0 a 3 concluídas — ver a
 tabela de estado no `README.md`.
 
 **O que já roda:** captura de 4 canais com buffer circular de 30 s, SPL estimado
 com ponderação A, camada de adaptação do instrumento de medição, três fontes de
-áudio (array I2S, `.wav` de campo, cena sintética) e localização direcional por
-GCC-PHAT com margem de erro. `edge/config.py` carrega a configuração do nó e
-recusa `modo=autuacao` sem declaração completa.
+áudio (array I2S, `.wav` de campo, cena sintética), localização direcional por
+GCC-PHAT com margem de erro, e classificação de assinatura acústica em duas
+implementações (regras explicáveis e rede neural). `edge/config.py` carrega a
+configuração do nó e recusa `modo=autuacao` sem declaração completa.
 
 **Precisão de ângulo medida em bancada:** erro médio 0,45°, pior caso 1,25°
 (meta do projeto: ±5°). `python -m edge.localization.main --varrer` refaz a
 medição — rodar depois de mexer em qualquer parâmetro do algoritmo.
+
+**Classificador:** acerta os 5 perfis de bancada
+(`python -m edge.classifier.main --bancada`), o que prova o pipeline e **não**
+prova acerto em campo — a cena sintética foi escrita por nós. O número que
+importa só existe depois de gravação em Bauru.
 
 **Hardware:** não adquirido. Todo o desenvolvimento acontece em modo de
 simulação até os componentes chegarem, e a suíte de testes precisa continuar
