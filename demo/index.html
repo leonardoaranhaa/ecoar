@@ -1,0 +1,756 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ECOAR — demonstração</title></head><body>
+<style>
+  /* ECOAR — demonstração de produto. Painel operacional, comprometido com tema
+     escuro: pinta fundo e cores explicitamente para segurar em qualquer host.
+     Sem fonte de CDN, sem tile, sem rede — abre offline. */
+  :root {
+    --fundo: #0e1113;
+    --superficie: #171b1e;
+    --superficie-alta: #1f2429;
+    --borda: #2b3239;
+    --texto: #e6e8ea;
+    --texto-fraco: #98a1a9;
+    --ambar: #f5a623;
+    --verde: #2ecc71;
+    --laranja: #ff6b35;
+    --vermelho: #e05252;
+    --azul: #4a9edb;
+
+    --titulo: "Manrope", ui-rounded, "Segoe UI", system-ui, sans-serif;
+    --corpo: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  #ecoar-app {
+    background: var(--fundo);
+    color: var(--texto);
+    font-family: var(--corpo);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  #ecoar-app h1, #ecoar-app h2, #ecoar-app h3 { font-family: var(--titulo); font-weight: 700; }
+
+  #ecoar-app button {
+    font-family: var(--corpo); font-size: 14px; border-radius: 7px;
+    border: 1px solid transparent; padding: 9px 16px; cursor: pointer; color: inherit;
+  }
+  .sec { background: transparent; border-color: var(--borda); color: var(--texto-fraco); }
+  .sec:hover { color: var(--texto); border-color: var(--texto-fraco); }
+  button:focus-visible, select:focus-visible, .pino:focus-visible { outline: 2px solid var(--ambar); outline-offset: 2px; }
+
+  /* -- login-lite -------------------------------------------------- */
+  .acesso { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+  .cartao {
+    width: min(460px, 100%); background: var(--superficie);
+    border: 1px solid var(--borda); border-radius: 14px; padding: 34px;
+  }
+  .marca { font-size: 36px; letter-spacing: 0.2em; margin: 0; }
+  .tagline { color: var(--texto-fraco); margin: 6px 0 26px; letter-spacing: 0.05em; }
+  .campo { margin-bottom: 16px; }
+  .campo label { display: block; margin-bottom: 7px; color: var(--texto-fraco); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .opcoes { display: flex; gap: 8px; flex-wrap: wrap; }
+  .opcao {
+    flex: 1; min-width: 120px; background: var(--fundo); border: 1px solid var(--borda);
+    border-radius: 8px; padding: 11px 12px; text-align: left;
+  }
+  .opcao.ativa { border-color: var(--laranja); background: var(--superficie-alta); }
+  .opcao .n { font-weight: 600; }
+  .opcao .d { color: var(--texto-fraco); font-size: 11.5px; margin-top: 2px; }
+  .entrar { width: 100%; background: var(--laranja); color: #17110d; font-weight: 700; margin-top: 8px; }
+  .rodape-acesso { margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--borda); color: var(--texto-fraco); font-size: 12px; }
+  .selo-demo {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--ambar); border: 1px solid var(--ambar);
+    border-radius: 4px; padding: 2px 7px; margin-bottom: 18px;
+  }
+
+  /* -- shell ------------------------------------------------------- */
+  .shell { display: grid; grid-template-columns: 216px 1fr; min-height: 100vh; }
+  .lateral { background: var(--superficie); border-right: 1px solid var(--borda); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+  .marca-lat { padding: 18px 20px; border-bottom: 1px solid var(--borda); display: flex; align-items: center; gap: 10px; }
+  .marca-lat .m { font-family: var(--titulo); letter-spacing: 0.16em; font-size: 17px; font-weight: 700; }
+  .pill-modo { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; padding: 3px 7px; border-radius: 4px; border: 1px solid var(--ambar); color: var(--ambar); }
+  .nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+  .nav button {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 20px;
+    background: transparent; border: none; border-left: 3px solid transparent;
+    color: var(--texto-fraco); text-align: left; font-size: 13.5px;
+  }
+  .nav button:hover { color: var(--texto); background: var(--superficie-alta); }
+  .nav button.ativo { color: var(--texto); border-left-color: var(--laranja); background: var(--superficie-alta); }
+  .nav .badge { margin-left: auto; font-family: var(--mono); font-size: 11px; background: var(--fundo); color: var(--ambar); border-radius: 10px; padding: 1px 8px; }
+  .rodape-lat { padding: 14px 20px; border-top: 1px solid var(--borda); display: flex; flex-direction: column; gap: 8px; }
+  .rodape-lat .quem { font-family: var(--mono); font-size: 11.5px; color: var(--texto-fraco); }
+
+  .principal { display: flex; flex-direction: column; min-height: 100vh; }
+  .barra-topo { display: flex; align-items: center; gap: 16px; padding: 12px 26px; border-bottom: 1px solid var(--borda); background: var(--superficie); }
+  .barra-topo .cid { display: flex; align-items: center; gap: 8px; }
+  .barra-topo select { background: var(--fundo); border: 1px solid var(--borda); color: var(--texto); border-radius: 7px; padding: 8px 12px; font-family: var(--corpo); font-size: 14px; }
+  .faixa-honesta {
+    margin-left: auto; font-size: 11.5px; color: var(--texto-fraco);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .faixa-honesta b { color: var(--ambar); font-weight: 600; }
+  .conteudo { padding: 24px 28px; overflow-y: auto; flex: 1; }
+
+  .topo-tela { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+  .topo-tela h1 { font-size: 22px; margin: 0; }
+  .topo-tela .sub { color: var(--texto-fraco); font-size: 13px; }
+
+  .aviso {
+    background: rgba(245,166,35,0.08); border-left: 3px solid var(--ambar);
+    padding: 10px 14px; border-radius: 0 7px 7px 0; font-size: 12.5px;
+    color: var(--texto-fraco); margin-bottom: 20px;
+  }
+
+  /* -- cartões / métricas ------------------------------------------ */
+  .grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 22px; }
+  .kpi { background: var(--superficie); border: 1px solid var(--borda); border-radius: 9px; padding: 15px 17px; }
+  .kpi .v { font-family: var(--mono); font-size: 25px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .kpi .r { color: var(--texto-fraco); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 5px; }
+  .kpi.pend .v { color: var(--ambar); }
+  .kpi.conf .v { color: var(--verde); }
+  .kpi.integ .v { color: var(--verde); font-family: var(--titulo); font-size: 22px; }
+
+  /* -- mapa -------------------------------------------------------- */
+  .mapa-wrap { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+  .mapa-cartao { background: var(--superficie); border: 1px solid var(--borda); border-radius: 12px; overflow: hidden; position: relative; }
+  .mapa-cartao svg { display: block; width: 100%; height: auto; }
+  .mapa-legenda { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 14px; font-size: 11.5px; color: var(--texto-fraco); background: rgba(14,17,19,0.72); padding: 7px 11px; border-radius: 8px; backdrop-filter: blur(3px); }
+  .mapa-legenda i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  .rua { stroke: #232a30; stroke-width: 1.4; }
+  .avenida { stroke: #2c343b; stroke-width: 3; }
+  .rio { fill: none; stroke: #1b3a4a; stroke-width: 9; stroke-linecap: round; opacity: 0.8; }
+  .quadra { fill: #12161a; }
+  .pino { cursor: pointer; }
+  .pino .halo { opacity: 0.25; }
+  .no-detalhe { background: var(--superficie); border: 1px solid var(--borda); border-radius: 12px; padding: 18px; }
+  .no-detalhe h3 { margin: 0 0 3px; font-size: 16px; }
+  .no-detalhe .end { color: var(--texto-fraco); font-family: var(--mono); font-size: 12px; margin-bottom: 14px; }
+  .linha-med { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--borda); font-size: 13px; }
+  .linha-med .rot { color: var(--texto-fraco); }
+  .linha-med .val { font-family: var(--mono); }
+
+  .et { display: inline-block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 4px; font-family: var(--mono); }
+  .et.ativo, .et.online, .et.confirmado { background: rgba(46,204,113,0.16); color: var(--verde); }
+  .et.atencao, .et.pendente_revisao, .et.ambiguo { background: rgba(245,166,35,0.16); color: var(--ambar); }
+  .et.offline, .et.violacao, .et.rejeitado { background: rgba(224,82,82,0.16); color: var(--vermelho); }
+
+  /* -- heatmap ----------------------------------------------------- */
+  .heat { border-collapse: collapse; font-family: var(--mono); font-size: 11px; }
+  .heat th { color: var(--texto-fraco); font-weight: 500; padding: 4px 6px; font-size: 10.5px; }
+  .heat td { width: 30px; height: 20px; text-align: center; border: 1px solid var(--fundo); background: var(--superficie); color: var(--texto); font-variant-numeric: tabular-nums; }
+  .heat td.h { color: var(--texto-fraco); background: transparent; text-align: right; padding-right: 7px; }
+  .legenda-heat { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--texto-fraco); font-size: 12px; }
+  .escala { width: 120px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--superficie), var(--ambar)); }
+
+  /* -- tabela / ranking -------------------------------------------- */
+  .tab { width: 100%; border-collapse: collapse; }
+  .tab th { text-align: left; color: var(--texto-fraco); font-weight: 500; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; padding: 8px 10px; border-bottom: 1px solid var(--borda); }
+  .tab td { padding: 9px 10px; border-bottom: 1px solid var(--borda); font-size: 13px; }
+  .tab td.num, .tab th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .barra-mini { height: 6px; background: var(--laranja); border-radius: 3px; display: inline-block; vertical-align: middle; }
+
+  /* -- revisão ----------------------------------------------------- */
+  .rev { display: grid; grid-template-columns: minmax(260px, 320px) 1fr; gap: 20px; }
+  .fila { border-right: 1px solid var(--borda); padding-right: 14px; }
+  .fila ul { list-style: none; margin: 0; padding: 0; }
+  .fila li { padding: 12px; border-bottom: 1px solid var(--borda); cursor: pointer; border-left: 3px solid transparent; border-radius: 4px; }
+  .fila li:hover { background: var(--superficie); }
+  .fila li.sel { background: var(--superficie-alta); border-left-color: var(--laranja); }
+  .fila .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .fila .cls { font-weight: 600; font-size: 13px; }
+  .fila .sc { font-family: var(--mono); font-size: 13px; }
+  .fila .meta { color: var(--texto-fraco); font-size: 12px; margin-top: 3px; font-family: var(--mono); }
+  .fila .et { margin-top: 7px; }
+
+  .grade-med { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 1px; background: var(--borda); border: 1px solid var(--borda); border-radius: 9px; overflow: hidden; margin-bottom: 18px; }
+  .med { background: var(--superficie); padding: 12px 14px; }
+  .med .rot { color: var(--texto-fraco); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .med .val { font-family: var(--mono); font-size: 17px; margin-top: 3px; }
+  .med .nota { color: var(--texto-fraco); font-size: 11px; margin-top: 3px; }
+  .med .nota.alerta { color: var(--ambar); }
+
+  .bloco { margin-bottom: 18px; }
+  .bloco h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--texto-fraco); margin: 0 0 10px; }
+  .player { display: flex; align-items: center; gap: 14px; background: var(--superficie); border: 1px solid var(--borda); border-radius: 10px; padding: 12px 14px; }
+  .btn-play { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--laranja); color: #17110d; border: none; font-size: 16px; display: grid; place-items: center; }
+  .onda { flex: 1; height: 44px; }
+  .aviso-audio { color: var(--texto-fraco); font-size: 11.5px; margin-top: 6px; }
+  .imgs { display: flex; gap: 12px; flex-wrap: wrap; }
+  .img-mock { width: 220px; }
+  .img-mock .cena { width: 100%; height: 130px; border: 1px solid var(--borda); border-radius: 7px; display: block; }
+  .img-mock figcaption { color: var(--texto-fraco); font-size: 11.5px; margin-top: 5px; font-family: var(--mono); }
+
+  .regras { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 12.5px; }
+  .regras li { display: grid; grid-template-columns: 18px 1fr auto; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--borda); align-items: baseline; }
+  .regras .ok { color: var(--verde); }
+  .regras .nao { color: var(--ambar); }
+  .regras .medido { color: var(--texto-fraco); }
+  .regras .nm { font-family: var(--corpo); }
+  .explica { background: var(--superficie); border-left: 3px solid var(--laranja); padding: 12px 14px; border-radius: 0 7px 7px 0; font-size: 13px; }
+  .hashln { font-family: var(--mono); font-size: 11.5px; color: var(--texto-fraco); word-break: break-all; }
+  .decisao { border: 1px solid var(--borda); border-radius: 10px; padding: 16px; background: var(--superficie); }
+  .decisao textarea { width: 100%; min-height: 60px; background: var(--fundo); border: 1px solid var(--borda); border-radius: 7px; color: var(--texto); font-family: var(--corpo); padding: 10px; resize: vertical; margin-bottom: 12px; }
+  .botoes { display: flex; gap: 10px; }
+  .confirmar { background: var(--verde); color: #06240f; font-weight: 700; }
+  .rejeitar { background: transparent; border: 1px solid var(--vermelho); color: var(--vermelho); }
+  .placeholder { color: var(--texto-fraco); padding: 26px 4px; }
+  .placeholder .dica { max-width: 46ch; margin-top: 10px; font-size: 13px; }
+
+  /* -- auditoria --------------------------------------------------- */
+  .hash-mono { font-family: var(--mono); font-size: 11.5px; color: var(--texto-fraco); }
+
+  /* -- barras por dia --------------------------------------------- */
+  .barras { display: flex; align-items: flex-end; gap: 4px; height: 130px; padding-top: 8px; }
+  .bd { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; min-width: 8px; }
+  .bd .c { background: var(--verde); border-radius: 2px 2px 0 0; }
+  .bd .r { background: var(--texto-fraco); }
+  .bd-rot { display: flex; gap: 4px; margin-top: 6px; }
+  .bd-rot span { flex: 1; text-align: center; font-size: 9px; color: var(--texto-fraco); font-family: var(--mono); }
+
+  /* -- toast ------------------------------------------------------- */
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--superficie-alta); border: 1px solid var(--borda); border-left: 3px solid var(--verde); padding: 12px 18px; border-radius: 9px; font-size: 13px; box-shadow: 0 8px 30px rgba(0,0,0,0.4); z-index: 50; }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; }
+    .lateral { position: static; height: auto; flex-direction: row; flex-wrap: wrap; }
+    .nav { display: flex; flex-wrap: wrap; }
+    .mapa-wrap, .rev { grid-template-columns: 1fr; }
+    .fila { border-right: none; }
+    .faixa-honesta { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .halo-anim { animation: none !important; }
+  }
+  @keyframes pulso { 0% { r: 7; opacity: 0.35; } 70% { r: 16; opacity: 0; } 100% { r: 16; opacity: 0; } }
+  .halo-anim { animation: pulso 2.4s ease-out infinite; }
+</style>
+
+<div id="ecoar-app">
+  <div id="acesso" class="acesso">
+    <div class="cartao">
+      <span class="selo-demo">Demonstração · dado de exemplo</span>
+      <h1 class="marca">ECOAR</h1>
+      <p class="tagline">Ouve. Confirma. Prova.</p>
+
+      <div class="campo">
+        <label>Cidade</label>
+        <div class="opcoes" id="op-cidade"></div>
+      </div>
+      <div class="campo">
+        <label>Entrar como</label>
+        <div class="opcoes" id="op-papel">
+          <button class="opcao ativa" data-papel="operador"><div class="n">Operador municipal</div><div class="d">Revisa e confirma ocorrências</div></button>
+          <button class="opcao" data-papel="admin"><div class="n">Administrador</div><div class="d">+ auditoria e gestão</div></button>
+        </div>
+      </div>
+      <button class="entrar" id="btn-entrar">Entrar</button>
+      <p class="rodape-acesso">
+        Sistema em <strong>modo de triagem</strong>: os eventos confirmados alimentam
+        a priorização de fiscalização. <b>Não geram autuação.</b> Login sem senha
+        nesta demonstração.
+      </p>
+    </div>
+  </div>
+
+  <div id="painel" class="shell" hidden>
+    <aside class="lateral">
+      <div class="marca-lat"><span class="m">ECOAR</span><span class="pill-modo">triagem</span></div>
+      <nav class="nav" id="nav"></nav>
+      <div class="rodape-lat"><span class="quem" id="quem"></span><button class="sec" id="sair">Trocar acesso</button></div>
+    </aside>
+    <div class="principal">
+      <div class="barra-topo">
+        <div class="cid">
+          <span style="color:var(--texto-fraco);font-size:12.5px">Cidade</span>
+          <select id="sel-cidade"></select>
+        </div>
+        <div class="faixa-honesta">
+          <span><b>Demonstração</b> · dado de exemplo</span> ·
+          <span>não gera multa</span> ·
+          <span>SPL sem valor legal</span>
+        </div>
+      </div>
+      <div class="conteudo" id="conteudo"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---- RNG determinístico (mesma demo toda vez) ---- */
+  function rng(seed) {
+    let s = seed >>> 0;
+    return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  }
+  const esc = (t) => String(t == null ? "" : t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  /* ---- Cidades (dado de exemplo) ---- */
+  const CIDADES = [
+    { id: "bauru", nome: "Bauru", uf: "SP", seed: 71,
+      nos: [
+        { id: "BAU-01", nome: "Ponte São João", end: "Av. Nações Unidas, sentido centro", x: 30, y: 38, estado: "ativo", bateria: 82 },
+        { id: "BAU-02", nome: "Centro — Praça Rui Barbosa", end: "Rua Batista de Carvalho", x: 54, y: 52, estado: "ativo", bateria: 74 },
+        { id: "BAU-03", nome: "Av. Getúlio Vargas", end: "próximo ao viaduto", x: 68, y: 30, estado: "atencao", bateria: 21 },
+        { id: "BAU-04", nome: "Jd. Bela Vista", end: "Rua Aviador Gomes Ribeiro", x: 42, y: 70, estado: "offline", bateria: 0 },
+      ] },
+    { id: "piracicaba", nome: "Piracicaba", uf: "SP", seed: 133,
+      nos: [
+        { id: "PIR-01", nome: "Beira-Rio", end: "Av. Beira Rio, junto à Rua do Porto", x: 36, y: 33, estado: "ativo", bateria: 91 },
+        { id: "PIR-02", nome: "Centro — Mercado", end: "Rua Governador Pedro de Toledo", x: 58, y: 55, estado: "ativo", bateria: 68 },
+        { id: "PIR-03", nome: "Av. Independência", end: "sentido bairro", x: 71, y: 42, estado: "ativo", bateria: 57 },
+      ] },
+    { id: "marilia", nome: "Marília", uf: "SP", seed: 205,
+      nos: [
+        { id: "MAR-01", nome: "Av. Sampaio Vidal", end: "Centro", x: 46, y: 40, estado: "ativo", bateria: 88 },
+        { id: "MAR-02", nome: "Av. Nelson Spielmann", end: "sentido rodovia", x: 63, y: 61, estado: "atencao", bateria: 34 },
+      ] },
+  ];
+
+  const PERFIS = ["escapamento_adulterado", "buzina", "obra", "trovao", "ambiente"];
+
+  /* Eventos pendentes detalhados (curados, para a fila de revisão) */
+  function pendentesDe(cidade) {
+    const n0 = cidade.nos[0].id, n1 = (cidade.nos[1] || cidade.nos[0]).id;
+    return [
+      { id: cidade.id + "-p1", no: n0, classe: "escapamento_adulterado", score: 0.91, azimute: 24, margem: 2, conf: 0.96, spl: 86.4, acao: "acionar", imgs: 2,
+        explica: "a favor: fundamental grave de motor (78 Hz); série harmônica forte; 46 estalos por segundo; duração de passagem, não rumor",
+        regras: [["classificador disponível", true, "heuristico/1.0"], ["score do alvo ≥ 0,80", true, "0.91"], ["nível ≥ piso do nó", true, "86.4 dB"], ["confiança da localização", true, "0.96"], ["margem angular estreita", true, "±2°"], ["dentro do campo de visão", true, "24°"]] },
+      { id: cidade.id + "-p2", no: n1, classe: "escapamento_adulterado", score: 0.58, azimute: 41, margem: 6, conf: 0.9, spl: 82.1, acao: "ambiguo", imgs: 0,
+        explica: "score compatível com revisão, mas não atingiu o limiar de acionamento — registrado sem foto para o operador decidir",
+        regras: [["classificador disponível", true, "heuristico/1.0"], ["score do alvo ≥ 0,80", false, "0.58"], ["nível ≥ piso do nó", true, "82.1 dB"], ["confiança da localização", true, "0.90"], ["margem angular estreita", true, "±6°"], ["dentro do campo de visão", true, "41°"]] },
+      { id: cidade.id + "-p3", no: n0, classe: "buzina", score: 0.12, azimute: 12, margem: 3, conf: 0.94, spl: 79.0, acao: "descartar", imgs: 0,
+        explica: "tom agudo estável, poucas harmônicas, sem estalo repetido — assinatura de buzina, não de escapamento. O sistema não aciona.",
+        regras: [["classificador disponível", true, "heuristico/1.0"], ["score do alvo ≥ 0,80", false, "0.12 (buzina)"], ["nível ≥ piso do nó", true, "79.0 dB"], ["confiança da localização", true, "0.94"], ["margem angular estreita", true, "±3°"], ["dentro do campo de visão", true, "12°"]] },
+    ].filter((e) => e.acao !== "descartar" || true); // mantém o descartado para mostrar o anti-falso-positivo
+  }
+
+  /* Gera contagens de confirmados por (dia, hora) — concentradas no fim de tarde e fins de semana */
+  function heatmapDe(cidade) {
+    const r = rng(cidade.seed);
+    const grade = {};
+    let total = 0;
+    const nEventos = 40 + Math.floor(r() * 40);
+    for (let i = 0; i < nEventos; i++) {
+      // hora: pico 18-22, cauda de manhã
+      let hora;
+      const u = r();
+      if (u < 0.62) hora = 18 + Math.floor(r() * 5);
+      else if (u < 0.82) hora = 7 + Math.floor(r() * 3);
+      else hora = Math.floor(r() * 24);
+      // dia: reforço sex/sáb
+      let dia;
+      const v = r();
+      if (v < 0.4) dia = 5 + Math.floor(r() * 2); // sex, sáb
+      else dia = Math.floor(r() * 7);
+      const k = dia + "-" + hora;
+      grade[k] = (grade[k] || 0) + 1;
+      total++;
+    }
+    return { grade, total };
+  }
+
+  function porDiaDe(total, cidade) {
+    const r = rng(cidade.seed + 9);
+    const dias = [];
+    let restante = total;
+    for (let i = 13; i >= 0; i--) {
+      const base = Math.round((restante / (i + 1)) * (0.6 + r() * 0.8));
+      const conf = Math.max(0, base);
+      const rej = Math.round(conf * (0.08 + r() * 0.16));
+      restante = Math.max(0, restante - conf);
+      dias.push({ dia: i, conf, rej });
+    }
+    return dias.reverse();
+  }
+
+  /* ---- Estado ---- */
+  const estado = {
+    cidadeId: "bauru",
+    papel: "operador",
+    tela: "mapa",
+    noSel: null,
+    eventoSel: null,
+    decisoes: {}, // id -> "confirmado" | "rejeitado"
+    auditoria: [],
+    audioCtx: null,
+  };
+
+  const cidade = () => CIDADES.find((c) => c.id === estado.cidadeId);
+  const el = (id) => document.getElementById(id);
+
+  const TELAS = [
+    { id: "mapa", nome: "Mapa da cidade" },
+    { id: "priorizacao", nome: "Priorização" },
+    { id: "revisao", nome: "Fila de revisão", badge: true },
+    { id: "metricas", nome: "Métricas" },
+    { id: "auditoria", nome: "Auditoria", admin: true },
+  ];
+
+  /* ---- Login ---- */
+  function montarAcesso() {
+    el("op-cidade").innerHTML = CIDADES.map((c, i) =>
+      `<button class="opcao ${i === 0 ? "ativa" : ""}" data-cidade="${c.id}"><div class="n">${esc(c.nome)}/${c.uf}</div><div class="d">${c.nos.length} equipamentos</div></button>`).join("");
+    el("op-cidade").querySelectorAll(".opcao").forEach((b) => b.addEventListener("click", () => {
+      el("op-cidade").querySelectorAll(".opcao").forEach((x) => x.classList.remove("ativa"));
+      b.classList.add("ativa"); estado.cidadeId = b.dataset.cidade;
+    }));
+    el("op-papel").querySelectorAll(".opcao").forEach((b) => b.addEventListener("click", () => {
+      el("op-papel").querySelectorAll(".opcao").forEach((x) => x.classList.remove("ativa"));
+      b.classList.add("ativa"); estado.papel = b.dataset.papel;
+    }));
+    el("btn-entrar").addEventListener("click", entrar);
+  }
+
+  function entrar() {
+    el("acesso").hidden = true;
+    el("painel").hidden = false;
+    el("quem").textContent = estado.papel === "admin" ? "admin · Studio Cerne" : "operador municipal";
+    el("sel-cidade").innerHTML = CIDADES.map((c) => `<option value="${c.id}">${esc(c.nome)}/${c.uf}</option>`).join("");
+    el("sel-cidade").value = estado.cidadeId;
+    el("sel-cidade").addEventListener("change", (e) => { estado.cidadeId = e.target.value; estado.noSel = null; estado.eventoSel = null; irPara(estado.tela); });
+    el("sair").addEventListener("click", () => { el("painel").hidden = true; el("acesso").hidden = false; });
+    montarNav();
+    irPara("mapa");
+  }
+
+  function telasVisiveis() { return TELAS.filter((t) => !t.admin || estado.papel === "admin"); }
+
+  function montarNav() {
+    el("nav").innerHTML = telasVisiveis().map((t) =>
+      `<button data-t="${t.id}"><span>${esc(t.nome)}</span>${t.badge ? '<span class="badge" data-badge hidden></span>' : ""}</button>`).join("");
+    el("nav").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => irPara(b.dataset.t)));
+  }
+
+  function irPara(id) {
+    estado.tela = id;
+    el("nav").querySelectorAll("button").forEach((b) => b.classList.toggle("ativo", b.dataset.t === id));
+    ({ mapa: telaMapa, priorizacao: telaPriorizacao, revisao: telaRevisao, metricas: telaMetricas, auditoria: telaAuditoria }[id])();
+    atualizarBadge();
+  }
+
+  function pendentesAtivos() {
+    return pendentesDe(cidade()).filter((e) => !estado.decisoes[e.id]);
+  }
+  function atualizarBadge() {
+    const n = pendentesAtivos().length;
+    document.querySelectorAll("[data-badge]").forEach((b) => { b.textContent = n; b.hidden = n === 0; });
+  }
+
+  /* ---- Tela: Mapa ---- */
+  const CORES = { ativo: "#2ecc71", atencao: "#f5a623", offline: "#e05252", violacao: "#e05252" };
+  const ROTULO_ESTADO = { ativo: "online", atencao: "bateria baixa", offline: "sem sinal" };
+
+  function telaMapa() {
+    const c = cidade();
+    const alvo = estado.noSel ? c.nos.find((n) => n.id === estado.noSel) : c.nos.find((n) => n.estado === "ativo") || c.nos[0];
+    el("conteudo").innerHTML = `
+      <div class="topo-tela"><div><h1>${esc(c.nome)} — equipamentos instalados</h1>
+        <div class="sub">${c.nos.length} nós · clique num pino para ver o detalhe</div></div></div>
+      <div class="mapa-wrap">
+        <div class="mapa-cartao">${desenharMapa(c)}
+          <div class="mapa-legenda">
+            <span><i style="background:#2ecc71"></i>online</span>
+            <span><i style="background:#f5a623"></i>atenção</span>
+            <span><i style="background:#e05252"></i>sem sinal</span>
+          </div>
+        </div>
+        <div id="no-detalhe">${detalheNo(c, alvo)}</div>
+      </div>`;
+    el("conteudo").querySelectorAll(".pino").forEach((p) => p.addEventListener("click", () => {
+      estado.noSel = p.dataset.no;
+      el("no-detalhe").innerHTML = detalheNo(c, c.nos.find((n) => n.id === p.dataset.no));
+    }));
+  }
+
+  function desenharMapa(c) {
+    const r = rng(c.seed + 3);
+    const W = 640, H = 420;
+    let g = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Mapa esquemático de ${esc(c.nome)}"><rect width="${W}" height="${H}" fill="#0e1113"/>`;
+    // quadras sutis
+    for (let i = 0; i < 60; i++) {
+      const x = Math.floor(r() * 12) * 54 + 8, y = Math.floor(r() * 8) * 52 + 8;
+      g += `<rect class="quadra" x="${x}" y="${y}" width="${40 + r() * 8}" height="${38 + r() * 8}" rx="3"/>`;
+    }
+    // grade de ruas
+    for (let x = 0; x <= W; x += 54) g += `<line class="rua" x1="${x}" y1="0" x2="${x}" y2="${H}"/>`;
+    for (let y = 0; y <= H; y += 52) g += `<line class="rua" x1="0" y1="${y}" x2="${W}" y2="${y}"/>`;
+    // avenida diagonal + uma horizontal forte
+    g += `<line class="avenida" x1="0" y1="${H * 0.7}" x2="${W}" y2="${H * 0.3}"/>`;
+    g += `<line class="avenida" x1="0" y1="${H * 0.5}" x2="${W}" y2="${H * 0.5}"/>`;
+    // rio
+    g += `<path class="rio" d="M -10 ${H * 0.28} Q ${W * 0.3} ${H * 0.2}, ${W * 0.5} ${H * 0.34} T ${W + 10} ${H * 0.42}"/>`;
+    // pinos
+    c.nos.forEach((n) => {
+      const cx = (n.x / 100) * W, cy = (n.y / 100) * H, cor = CORES[n.estado] || "#9aa3ab";
+      const sel = n.id === estado.noSel;
+      if (n.estado === "ativo") g += `<circle class="halo halo-anim" cx="${cx}" cy="${cy}" r="7" fill="${cor}"/>`;
+      g += `<g class="pino" data-no="${n.id}" tabindex="0" role="button" aria-label="${esc(n.nome)}">
+        <circle cx="${cx}" cy="${cy}" r="${sel ? 11 : 8}" fill="${cor}" stroke="#0e1113" stroke-width="2"/>
+        <circle cx="${cx}" cy="${cy}" r="3" fill="#0e1113"/>
+        ${sel ? `<circle cx="${cx}" cy="${cy}" r="15" fill="none" stroke="${cor}" stroke-width="1.5" opacity="0.6"/>` : ""}
+      </g>`;
+    });
+    g += `</svg>`;
+    return g;
+  }
+
+  function detalheNo(c, n) {
+    if (!n) return "";
+    const heat = heatmapDe(c);
+    const confDoNo = Math.max(3, Math.round(heat.total / c.nos.length));
+    return `
+      <div class="no-detalhe">
+        <h3>${esc(n.nome)}</h3>
+        <div class="end">${esc(n.id)} · ${esc(n.end)}</div>
+        <div style="margin-bottom:12px"><span class="et ${n.estado}">${ROTULO_ESTADO[n.estado] || n.estado}</span></div>
+        <div class="linha-med"><span class="rot">Bateria</span><span class="val">${n.estado === "offline" ? "—" : n.bateria + "%"}</span></div>
+        <div class="linha-med"><span class="rot">Eventos confirmados</span><span class="val">${n.estado === "offline" ? "—" : confDoNo}</span></div>
+        <div class="linha-med"><span class="rot">Último contato</span><span class="val">${n.estado === "offline" ? "há 3 dias" : "há 2 min"}</span></div>
+        <div class="linha-med" style="border:none"><span class="rot">Modo</span><span class="val">triagem</span></div>
+        ${n.estado === "offline" ? '<div class="aviso" style="margin:14px 0 0">Sem heartbeat há mais de 15 min. No sistema real, isso abre um alerta na fila de nós.</div>' : ""}
+      </div>`;
+  }
+
+  /* ---- Tela: Priorização ---- */
+  const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  function telaPriorizacao() {
+    const c = cidade();
+    const { grade } = heatmapDe(c);
+    let max = 0; Object.values(grade).forEach((v) => { max = Math.max(max, v); });
+    const linhas = [];
+    for (let h = 0; h < 24; h++) {
+      const cels = DIAS.map((_, d) => {
+        const t = grade[d + "-" + h] || 0, i = max ? t / max : 0;
+        const bg = t ? `background: rgba(245,166,35,${(0.12 + 0.88 * i).toFixed(2)}); color:#14181b` : "";
+        return `<td style="${bg}" title="${DIAS[d]} ${h}h: ${t}">${t || ""}</td>`;
+      }).join("");
+      linhas.push(`<tr><td class="h">${String(h).padStart(2, "0")}h</td>${cels}</tr>`);
+    }
+    const porNo = c.nos.filter((n) => n.estado !== "offline").map((n) => ({ n, v: Math.max(3, Math.round(heatmapDe(c).total / c.nos.length + (n.x % 7))) })).sort((a, b) => b.v - a.v);
+    const maxNo = Math.max(...porNo.map((x) => x.v), 1);
+    const rank = porNo.map((x) => `<tr><td>${esc(x.n.id)}</td><td>${esc(x.n.nome)}</td><td class="num">${x.v}</td><td><span class="barra-mini" style="width:${Math.round((x.v / maxNo) * 120)}px"></span></td></tr>`).join("");
+
+    el("conteudo").innerHTML = `
+      <div class="topo-tela"><div><h1>Priorização de fiscalização</h1>
+        <div class="sub">Onde e quando o problema é pior — para direcionar a blitz</div></div>
+        <button class="sec" id="btn-rel">Exportar relatório</button></div>
+      <div class="aviso">Baseado apenas em eventos <b>confirmados por operador</b>. Em modo de triagem, este é o dado de priorização — não gera autuação.</div>
+      <div class="bloco"><h3>Quando — eventos confirmados por dia da semana × hora</h3>
+        <table class="heat"><tr><th></th>${DIAS.map((d) => `<th>${d}</th>`).join("")}</tr>${linhas.join("")}</table>
+        <div class="legenda-heat"><span>menos</span><span class="escala"></span><span>mais</span></div></div>
+      <div class="bloco"><h3>Onde — pontos por eventos confirmados</h3>
+        <table class="tab"><tr><th>Nó</th><th>Local</th><th class="num">Confirmados</th><th></th></tr>${rank}</table></div>`;
+    el("btn-rel").addEventListener("click", () => toast("No sistema real, isto gera um relatório PDF de priorização com as ressalvas jurídicas."));
+  }
+
+  /* ---- Tela: Revisão ---- */
+  function telaRevisao() {
+    const c = cidade();
+    const pend = pendentesAtivos();
+    el("conteudo").innerHTML = `
+      <div class="topo-tela"><div><h1>Fila de revisão</h1>
+        <div class="sub">Todo evento passa por decisão humana antes de virar dado de priorização</div></div></div>
+      <div class="rev">
+        <div class="fila"><ul id="lista"></ul>${pend.length ? "" : '<p class="placeholder">Fila vazia. Nada pendente nesta cidade.</p>'}</div>
+        <div id="detalhe"><div class="placeholder"><p>Selecione um evento na fila.</p>
+          <p class="dica">Nenhum evento é contado sozinho: a priorização se alimenta do que você confirmar aqui.</p></div></div>
+      </div>`;
+    desenharFila();
+    if (pend.length) abrirEvento(pend[0].id);
+  }
+
+  function desenharFila() {
+    const pend = pendentesAtivos();
+    el("lista").innerHTML = pend.map((e) => `
+      <li data-e="${e.id}" class="${estado.eventoSel === e.id ? "sel" : ""}">
+        <div class="top"><span class="cls">${esc(e.classe)}</span><span class="sc">${e.score.toFixed(2)}</span></div>
+        <div class="meta">${esc(e.no)} · ${e.azimute}° · ${e.spl.toFixed(1)} dB</div>
+        <span class="et ${e.acao}">${e.acao}</span>
+      </li>`).join("");
+    el("lista").querySelectorAll("li").forEach((li) => li.addEventListener("click", () => abrirEvento(li.dataset.e)));
+  }
+
+  function abrirEvento(id) {
+    estado.eventoSel = id;
+    desenharFila();
+    const e = pendentesDe(cidade()).find((x) => x.id === id);
+    const legal = e.acao === "acionar";
+    el("detalhe").innerHTML = `
+      <div class="topo-tela"><div><h1 style="font-size:19px">${esc(e.classe)}</h1>
+        <div class="sub">${esc(id)} · ${esc(e.no)}</div></div><span class="et ${e.acao}">${e.acao}</span></div>
+      <div id="msg"></div>
+      <div class="grade-med">
+        <div class="med"><div class="rot">Score do alvo</div><div class="val">${e.score.toFixed(2)}</div><div class="nota">heuristico/1.0</div></div>
+        <div class="med"><div class="rot">Ângulo</div><div class="val">${e.azimute}°</div><div class="nota">±${e.margem}° · conf. ${e.conf.toFixed(2)}</div></div>
+        <div class="med"><div class="rot">Nível estimado</div><div class="val">${e.spl.toFixed(1)} dB</div><div class="nota alerta">sem valor legal — array MEMS</div></div>
+        <div class="med"><div class="rot">Decisão do nó</div><div class="val">${e.acao}</div><div class="nota">politica/1.0</div></div>
+      </div>
+      <div class="bloco"><h3>Áudio do evento</h3>
+        <div class="player"><button class="btn-play" id="btn-play" aria-label="Reproduzir">▶</button>
+          <canvas class="onda" id="onda" width="600" height="44"></canvas></div>
+        <p class="aviso-audio">Som sintetizado nesta demonstração, para ilustrar a assinatura. No sistema real é o áudio de 4 canais capturado no poste — é ele que o hash protege.</p></div>
+      ${e.imgs ? blocoImgs(e) : '<div class="bloco"><h3>Imagens</h3><p class="aviso-audio">Sem imagem: a câmera não foi acionada (evento ambíguo). Entrou na fila mesmo assim.</p></div>'}
+      <div class="bloco"><h3>Por que o classificador decidiu assim</h3><div class="explica">${esc(e.explica)}</div></div>
+      <div class="bloco"><h3>Regras avaliadas pelo nó — politica/1.0</h3><ul class="regras">${e.regras.map((r) => `<li><span class="${r[1] ? "ok" : "nao"}">${r[1] ? "✓" : "✗"}</span><span class="nm">${esc(r[0])}</span><span class="medido">${esc(r[2])}</span></li>`).join("")}</ul></div>
+      <div class="bloco"><h3>Integridade</h3><p class="hashln">sha256:${hashFake(id)}</p></div>
+      <div class="decisao"><h3 style="margin-top:0">Sua decisão</h3>
+        <textarea id="obs" placeholder="Observação (opcional) — fica registrada com o seu nome"></textarea>
+        <div class="botoes"><button class="confirmar" id="btn-conf">Confirmar ocorrência</button><button class="rejeitar" id="btn-rej">Rejeitar</button></div></div>`;
+    desenharOnda(el("onda"), id);
+    el("btn-play").addEventListener("click", () => tocar(e));
+    el("btn-conf").addEventListener("click", () => decidir(e, "confirmado"));
+    el("btn-rej").addEventListener("click", () => decidir(e, "rejeitado"));
+  }
+
+  function blocoImgs(e) {
+    return `<div class="bloco"><h3>Imagens</h3><div class="imgs">
+      <figure class="img-mock">${cenaSVG("placa")}<figcaption>placa · 320×180 · CAPTURA SIMULADA</figcaption></figure>
+      <figure class="img-mock">${cenaSVG("pano")}<figcaption>panorâmica · 640×360 · CAPTURA SIMULADA</figcaption></figure>
+    </div><p class="aviso-audio">O nó não lê placa. A identificação do veículo, se ocorrer, é no backend — nunca em modo de triagem.</p></div>`;
+  }
+  function cenaSVG(tipo) {
+    // padrão de teste deliberadamente artificial — nunca finge foto real
+    return `<svg class="cena" viewBox="0 0 220 130"><defs><linearGradient id="g${tipo}" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b2733"/><stop offset="1" stop-color="#2a1b33"/></linearGradient></defs>
+      <rect width="220" height="130" fill="url(#g${tipo})"/>
+      ${Array.from({ length: 9 }, (_, i) => `<line x1="${i * 26}" y1="0" x2="${i * 26 + 40}" y2="130" stroke="#ffffff10" stroke-width="6"/>`).join("")}
+      <text x="110" y="70" text-anchor="middle" fill="#ffffff30" font-family="monospace" font-size="13">PADRÃO DE TESTE</text></svg>`;
+  }
+
+  function desenharOnda(canvas, id) {
+    if (!canvas || !canvas.getContext) return;
+    const ctx = canvas.getContext("2d"), W = canvas.width, H = canvas.height, r = rng(id.length * 131 + 7);
+    ctx.clearRect(0, 0, W, H); ctx.strokeStyle = "#9aa3ab"; ctx.lineWidth = 1.4; ctx.beginPath();
+    for (let x = 0; x < W; x++) {
+      const env = Math.exp(-Math.pow((x - W * 0.5) / (W * 0.28), 2));
+      const amp = env * (0.3 + 0.7 * r()) * (H * 0.42);
+      const y = H / 2 + (r() - 0.5) * 2 * amp;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  /* Sintetiza um som tipo escapamento com Web Audio (offline, sem arquivo) */
+  function tocar(e) {
+    try {
+      estado.audioCtx = estado.audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const ac = estado.audioCtx, t0 = ac.currentTime, dur = 1.6;
+      const master = ac.createGain(); master.gain.value = 0.0001; master.connect(ac.destination);
+      master.gain.setValueAtTime(0.0001, t0);
+      master.gain.exponentialRampToValueAtTime(0.5, t0 + 0.5);
+      master.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      const alvo = e.classe === "escapamento_adulterado";
+      const base = alvo ? 78 : (e.classe === "buzina" ? 440 : 200);
+      const nHarm = alvo ? 9 : 3;
+      for (let h = 1; h <= nHarm; h++) {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = alvo ? "sawtooth" : "square";
+        o.frequency.setValueAtTime(base * h, t0);
+        if (alvo) o.frequency.linearRampToValueAtTime(base * h * 1.15, t0 + dur); // subida de rotação
+        g.gain.value = (alvo ? 0.5 : 0.6) / (h * 1.4);
+        o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + dur);
+      }
+      if (alvo) { // estalo pulsado
+        const lfo = ac.createOscillator(), lg = ac.createGain();
+        lfo.frequency.value = 39; lg.gain.value = 0.35; lfo.connect(lg); lg.connect(master.gain); lfo.start(t0); lfo.stop(t0 + dur);
+      }
+      // animação da onda
+      if (!window.matchMedia || !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        const canvas = el("onda"); let f = 0;
+        const anim = () => { if (f++ > 26) { desenharOnda(canvas, e.id); return; } desenharOndaViva(canvas); requestAnimationFrame(anim); };
+        anim();
+      }
+    } catch (err) { toast("Áudio indisponível neste navegador — o waveform ilustra a assinatura."); }
+  }
+  function desenharOndaViva(canvas) {
+    if (!canvas) return; const ctx = canvas.getContext("2d"), W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H); ctx.strokeStyle = "#ff6b35"; ctx.lineWidth = 1.6; ctx.beginPath();
+    for (let x = 0; x < W; x++) {
+      const env = Math.exp(-Math.pow((x - W * 0.5) / (W * 0.3), 2));
+      const y = H / 2 + Math.sin(x * 0.22 + performance.now() * 0.02) * env * H * 0.4 * Math.random();
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  function decidir(e, resultado) {
+    estado.decisoes[e.id] = resultado;
+    estado.auditoria.unshift({ tipo: "revisao", ator: estado.papel === "admin" ? "admin" : "operador municipal", ev: e.id, det: resultado, quando: agora() });
+    toast(resultado === "confirmado" ? "Evento confirmado. Entra na priorização." : "Evento rejeitado. Não vira dado.");
+    const pend = pendentesAtivos();
+    if (pend.length) { estado.eventoSel = null; telaRevisao(); }
+    else { estado.eventoSel = null; telaRevisao(); }
+    atualizarBadge();
+  }
+
+  /* ---- Tela: Métricas ---- */
+  function telaMetricas() {
+    const c = cidade();
+    const { total } = heatmapDe(c);
+    const rej = Math.round(total * 0.13), pend = pendentesAtivos().length;
+    const taxa = total + rej ? ((rej / (total + rej)) * 100).toFixed(1) + "%" : "—";
+    const dias = porDiaDe(total, c);
+    const maxD = Math.max(...dias.map((d) => d.conf + d.rej), 1);
+    const barras = dias.map((d) => `<div class="bd" title="${d.conf} conf., ${d.rej} rej."><div class="r" style="height:${(d.rej / maxD) * 118}px"></div><div class="c" style="height:${(d.conf / maxD) * 118}px"></div></div>`).join("");
+    const rot = dias.map((_, i) => `<span>${i + 1}</span>`).join("");
+    el("conteudo").innerHTML = `
+      <div class="topo-tela"><div><h1>Métricas</h1><div class="sub">Volume operacional e taxa de rejeição na revisão</div></div></div>
+      <div class="grade">
+        <div class="kpi conf"><div class="v">${total}</div><div class="r">Confirmados</div></div>
+        <div class="kpi"><div class="v">${rej}</div><div class="r">Rejeitados</div></div>
+        <div class="kpi pend"><div class="v">${pend}</div><div class="r">Pendentes</div></div>
+        <div class="kpi"><div class="v">${taxa}</div><div class="r">Taxa de rejeição</div></div>
+      </div>
+      <div class="bloco"><h3>Eventos por dia — confirmados (verde) e rejeitados (cinza)</h3>
+        <div class="barras">${barras}</div><div class="bd-rot">${rot}</div></div>
+      <div class="aviso">A comparação de custo com blitz manual depende do custo de operação informado pelo município. O sistema entrega o volume; a economia é calculada com o dado do contratante.</div>`;
+  }
+
+  /* ---- Tela: Auditoria (admin) ---- */
+  function telaAuditoria() {
+    const c = cidade();
+    const base = [
+      { tipo: "evento_recebido", ator: c.nos[0].id, ev: c.id + "-p1", det: "acao=acionar", quando: "há 4 min" },
+      { tipo: "evento_recebido", ator: c.nos[0].id, ev: c.id + "-p3", det: "acao=descartar", quando: "há 9 min" },
+      { tipo: "alerta_violacao", ator: c.nos[Math.min(2, c.nos.length - 1)].id, ev: "—", det: "tipo=impacto", quando: "há 21 min" },
+    ];
+    const linhas = estado.auditoria.concat(base);
+    const corpo = linhas.map((e, i) => `<tr><td class="num">${linhas.length - i}</td><td>${esc(e.quando)}</td><td>${esc(e.tipo)}</td><td>${esc(e.ator)}</td><td>${esc(e.ev)}</td><td class="hash-mono">sha256:${hashFake(e.ev + e.tipo + i)}…</td></tr>`).join("");
+    el("conteudo").innerHTML = `
+      <div class="topo-tela"><div><h1>Trilha de auditoria</h1><div class="sub">Cadeia encadeada por hash — qualquer alteração do histórico é detectável</div></div></div>
+      <div class="grade">
+        <div class="kpi integ"><div class="v">íntegra</div><div class="r">Integridade da cadeia</div></div>
+        <div class="kpi"><div class="v">${linhas.length}</div><div class="r">Entradas</div></div>
+      </div>
+      <div class="aviso">A trilha registra <b>que</b> um evento ocorreu — o tipo, o nó, o operador — nunca a identificação do veículo. É o que sustenta a evidência perante contestação.</div>
+      <table class="tab"><tr><th class="num">#</th><th>Quando</th><th>Tipo</th><th>Ator</th><th>Evento</th><th>Hash</th></tr>${corpo}</table>`;
+  }
+
+  /* ---- Utilidades ---- */
+  function hashFake(s) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < String(s).length; i++) { h ^= String(s).charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return h.toString(16).padStart(8, "0") + (h * 2654435761 >>> 0).toString(16).padStart(8, "0");
+  }
+  function agora() { return "agora"; }
+  let toastT = null;
+  function toast(msg) {
+    let t = document.getElementById("ecoar-toast");
+    if (!t) { t = document.createElement("div"); t.id = "ecoar-toast"; t.className = "toast"; document.getElementById("ecoar-app").appendChild(t); }
+    t.textContent = msg; t.style.display = "block";
+    clearTimeout(toastT); toastT = setTimeout(() => { t.style.display = "none"; }, 3200);
+  }
+
+  montarAcesso();
+})();
+</script>
+</body></html>
