@@ -5,6 +5,9 @@ venv/
 *.egg-info/
 .pytest_cache/
 
+# Segredos do deploy — nunca versionar
+deploy/.env
+
 # Dados operacionais — nunca versionar
 dados/
 *.db

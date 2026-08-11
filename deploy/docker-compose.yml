@@ -1,0 +1,30 @@
+# Sobe a demonstração da Opção B num VPS com um comando.
+#
+#   cd deploy
+#   ./gerar-env.sh        # cria .env com tokens fortes (uma vez)
+#   docker compose up -d  # constrói, semeia no primeiro boot, sobe o painel
+#
+# Acesso: http://SEU_IP:8000/  (token operador ou admin — veja com: cat .env)
+
+services:
+  ecoar:
+    build:
+      # O contexto é a raiz do repositório: o Dockerfile copia backend/, edge/,
+      # dashboard/, scripts/ e config/.
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: ecoar-demo:latest
+    container_name: ecoar-demo
+    env_file:
+      - .env
+    ports:
+      # Só IP:porta nesta demo. Para link limpo com HTTPS, ver a seção
+      # "Domínio e cadeado" do deploy/README.md.
+      - "8000:8000"
+    volumes:
+      # Banco, pacotes e trilha de auditoria sobrevivem a reinício e a rebuild.
+      - ecoar-dados:/app/dados
+    restart: unless-stopped
+
+volumes:
+  ecoar-dados:
