@@ -1,0 +1,12 @@
+# edge/audio_capture
+#
+# Núcleo — roda em qualquer máquina, inclusive sem hardware:
+numpy>=1.24
+PyYAML>=6.0
+
+# Só no nó de campo (instalados por requirements-hardware.txt na raiz):
+#   sounddevice>=0.4.6   captura I2S do array MEMS via ALSA
+#   pyserial>=3.5        instrumento de medição por porta serial
+#
+# Nenhum dos dois é importado no topo de arquivo nenhum: sem eles, as fontes
+# 'wav' e 'sintetica' e o instrumento 'mock'/'ausente' continuam funcionando.

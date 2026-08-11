@@ -76,6 +76,9 @@ comum:
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 pytest
+
+# captura de bancada com cena sintética, sem microfone nenhum
+python -m edge.audio_capture.main --fonte sintetica --azimute 90 --duracao 6
 ```
 
 No nó de campo, a instalação adiciona os drivers reais:
@@ -91,7 +94,7 @@ Construção por etapas, conforme `01-tecnico/prompts-claude-code.md` do projeto
 | # | Etapa | Estado |
 |---|---|---|
 | 0 | Estrutura do repositório e decisões | **feito** |
-| 1 | `edge/audio_capture` | pendente |
+| 1 | `edge/audio_capture` | **feito** |
 | 2 | `edge/localization` | pendente |
 | 3 | `edge/classifier` | pendente |
 | 4 | `edge/camera_trigger` | pendente |

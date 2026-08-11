@@ -1,0 +1,78 @@
+# Configuração de exemplo de um nó ECOAR.
+# Copie para config/no-<identificador>.yaml e ajuste. Segredo não entra aqui:
+# use ${VARIAVEL} ou ${VARIAVEL:-padrao} e defina no ambiente do nó.
+
+# A chave vai entre aspas de propósito: `no` sem aspas é booleano em YAML.
+"no":
+  id: "bauru-ponte-sao-joao-01"
+  descricao: "Poste do lado ímpar, sentido centro"
+  geolocalizacao:
+    latitude: -22.3145
+    longitude: -49.0600
+
+# triagem = priorização de fiscalização (único modo liberado hoje).
+# autuacao exige o bloco 'autuacao' completo e instrumento Classe 1 real.
+# Ver docs/legal/inmetro.md.
+modo: triagem
+
+audio:
+  taxa_amostragem: 48000
+  canais: 4
+  buffer_segundos: 30
+  bloco_amostras: 4096
+
+  fonte:
+    # i2s      = array real no Raspberry Pi (exige requirements-hardware.txt)
+    # wav      = arquivo multicanal, para rodar gravação de campo pela cadeia
+    # sintetica = cena de bancada, sem hardware nenhum
+    tipo: sintetica
+    dispositivo: null       # nome/índice do dispositivo ALSA, quando tipo=i2s
+    caminho: null           # arquivo .wav, quando tipo=wav
+    laco: false
+    tempo_real: true
+    perfil: escapamento     # cena sintética: escapamento|buzina|obra|trovao|ambiente
+    azimute_graus: 45.0
+
+  calibracao:
+    # Converte dBFS do array em dB SPL estimado. NÃO é calibração metrológica:
+    # o valor resultante carrega valor_legal=false em toda a evidência.
+    offset_db: 94.0
+    ponderacao: A
+    referencia: "sem campanha de calibração registrada"
+    medido_em: null
+
+array:
+  # Precisa bater com a montagem física, medida com régua. Erro aqui vira erro
+  # sistemático de ângulo em todos os eventos deste nó.
+  geometria: circular
+  raio_m: 0.045
+  n_microfones: 4
+  azimute_offset_graus: 0.0
+  velocidade_som_ms: 343.0
+
+sonometro:
+  # ausente = nenhum instrumento instalado (o normal em modo=triagem)
+  # mock    = valores simulados, para desenvolver sem o equipamento
+  # serial  = instrumento real por porta serial (ver edge/audio_capture/sonometro.py)
+  tipo: ausente
+  porta: null
+  baud: 9600
+  timeout_s: 2.0
+  comando: null
+  modelo: null
+  fabricante: null
+  classe: null
+  certificado: null
+  validade_calibracao: null
+
+# Só preencher quando houver regulamentação federal que valide autuação
+# automática por ruído. Sem este bloco completo, modo=autuacao é recusado.
+#
+# autuacao:
+#   habilitada_por: "nome e cargo de quem autorizou"
+#   base_normativa: "norma federal que valida a autuação automática"
+#   instrumento_certificado:
+#     modelo: "..."
+#     classe: 1
+#     certificado: "número do certificado"
+#     validade_calibracao: "AAAA-MM-DD"

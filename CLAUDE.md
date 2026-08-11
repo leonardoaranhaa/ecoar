@@ -117,16 +117,20 @@ Antes de trabalhar em algo, ler o documento da área.
 
 ## Status atual
 
-**Fase:** construção do MVP, modo=triagem. Etapa 0 (estrutura e decisões)
-concluída; módulos de código ainda não começaram — ver a tabela de estado no
-`README.md`.
+**Fase:** construção do MVP, modo=triagem. Etapas 0 (estrutura e decisões) e 1
+(`edge/audio_capture`) concluídas — ver a tabela de estado no `README.md`.
+
+**O que já roda:** captura de 4 canais com buffer circular de 30 s, SPL estimado
+com ponderação A, camada de adaptação do instrumento de medição, e três fontes
+de áudio (array I2S, `.wav` de campo, cena sintética de bancada). `edge/config.py`
+carrega a configuração do nó e recusa `modo=autuacao` sem declaração completa.
 
 **Hardware:** não adquirido. Todo o desenvolvimento acontece em modo de
 simulação até os componentes chegarem, e a suíte de testes precisa continuar
 passando sem hardware mesmo depois disso.
 
-**Próximo passo lógico:** `edge/audio_capture` — buffer circular, SPL estimado e
-a camada de adaptação do instrumento de medição.
+**Próximo passo lógico:** `edge/localization` — GCC-PHAT sobre os 4 canais, com
+a geometria já definida em `edge/geometria.py`.
 
 **Pendência que não depende de código:** gravar áudio de campo nos pontos
 críticos de Bauru antes de comprar hardware. É o teste mais barato da pergunta
