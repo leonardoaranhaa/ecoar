@@ -117,20 +117,26 @@ Antes de trabalhar em algo, ler o documento da área.
 
 ## Status atual
 
-**Fase:** construção do MVP, modo=triagem. Etapas 0 (estrutura e decisões) e 1
-(`edge/audio_capture`) concluídas — ver a tabela de estado no `README.md`.
+**Fase:** construção do MVP, modo=triagem. Etapas 0 a 2 concluídas — ver a
+tabela de estado no `README.md`.
 
 **O que já roda:** captura de 4 canais com buffer circular de 30 s, SPL estimado
-com ponderação A, camada de adaptação do instrumento de medição, e três fontes
-de áudio (array I2S, `.wav` de campo, cena sintética de bancada). `edge/config.py`
-carrega a configuração do nó e recusa `modo=autuacao` sem declaração completa.
+com ponderação A, camada de adaptação do instrumento de medição, três fontes de
+áudio (array I2S, `.wav` de campo, cena sintética) e localização direcional por
+GCC-PHAT com margem de erro. `edge/config.py` carrega a configuração do nó e
+recusa `modo=autuacao` sem declaração completa.
+
+**Precisão de ângulo medida em bancada:** erro médio 0,45°, pior caso 1,25°
+(meta do projeto: ±5°). `python -m edge.localization.main --varrer` refaz a
+medição — rodar depois de mexer em qualquer parâmetro do algoritmo.
 
 **Hardware:** não adquirido. Todo o desenvolvimento acontece em modo de
 simulação até os componentes chegarem, e a suíte de testes precisa continuar
 passando sem hardware mesmo depois disso.
 
-**Próximo passo lógico:** `edge/localization` — GCC-PHAT sobre os 4 canais, com
-a geometria já definida em `edge/geometria.py`.
+**Próximo passo lógico:** `edge/classifier` — log-mel e classificação de
+assinatura acústica, com o aviso de que o modelo é provisório até haver gravação
+de campo de Bauru.
 
 **Pendência que não depende de código:** gravar áudio de campo nos pontos
 críticos de Bauru antes de comprar hardware. É o teste mais barato da pergunta

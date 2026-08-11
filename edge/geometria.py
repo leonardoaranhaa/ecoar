@@ -58,7 +58,35 @@ class ArrayCircular:
         atrasos = -projecao / self.velocidade_som_ms
         return atrasos - atrasos.min()
 
+    def pares(self) -> list[tuple[int, int]]:
+        """Todos os pares de microfones, sem repetir.
+
+        Quatro microfones dão seis pares. Usar todos, e não só os vizinhos,
+        é o que sustenta a estimativa quando um par cai numa posição ruim em
+        relação à fonte.
+        """
+        return [
+            (i, j)
+            for i in range(self.n_microfones)
+            for j in range(i + 1, self.n_microfones)
+        ]
+
+    def tdoas_teoricos(self, azimute_graus: float) -> np.ndarray:
+        """Diferença de tempo esperada em cada par, para uma fonte naquele azimute."""
+        atrasos = self.atrasos(azimute_graus)
+        return np.array([atrasos[i] - atrasos[j] for i, j in self.pares()])
+
     @property
     def atraso_maximo_s(self) -> float:
         """Maior diferença de tempo fisicamente possível entre dois microfones."""
         return 2.0 * self.raio_m / self.velocidade_som_ms
+
+    @property
+    def frequencia_ambiguidade_hz(self) -> float:
+        """Acima desta frequência a fase entre os microfones mais distantes ambigua.
+
+        Meio comprimento de onda cabendo entre os dois microfones mais afastados.
+        Com raio de 4,5 cm dá cerca de 1,9 kHz — motivo de a estimativa de ângulo
+        trabalhar numa banda limitada em vez do espectro inteiro.
+        """
+        return self.velocidade_som_ms / (2.0 * 2.0 * self.raio_m)

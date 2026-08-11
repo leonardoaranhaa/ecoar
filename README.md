@@ -95,7 +95,7 @@ Construção por etapas, conforme `01-tecnico/prompts-claude-code.md` do projeto
 |---|---|---|
 | 0 | Estrutura do repositório e decisões | **feito** |
 | 1 | `edge/audio_capture` | **feito** |
-| 2 | `edge/localization` | pendente |
+| 2 | `edge/localization` | **feito** |
 | 3 | `edge/classifier` | pendente |
 | 4 | `edge/camera_trigger` | pendente |
 | 5 | `edge/evidence_packager` | pendente |
