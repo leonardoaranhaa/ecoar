@@ -134,9 +134,9 @@ medição — rodar depois de mexer em qualquer parâmetro do algoritmo.
 simulação até os componentes chegarem, e a suíte de testes precisa continuar
 passando sem hardware mesmo depois disso.
 
-**Próximo passo lógico:** `edge/classifier` — log-mel e classificação de
-assinatura acústica, com o aviso de que o modelo é provisório até haver gravação
-de campo de Bauru.
+**Próximo passo lógico:** `edge/camera_trigger` — a tabela de decisão
+determinística que define acionar, ambíguo ou descartar.
+
 
 **Pendência que não depende de código:** gravar áudio de campo nos pontos
 críticos de Bauru antes de comprar hardware. É o teste mais barato da pergunta

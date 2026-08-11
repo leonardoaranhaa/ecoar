@@ -50,6 +50,14 @@ array:
   azimute_offset_graus: 0.0
   velocidade_som_ms: 343.0
 
+classificador:
+  # auto       = usa o modelo neural se ele carregar, senão cai para o
+  #              classificador de referência e registra a degradação
+  # heuristico = só o classificador de referência (regras explícitas)
+  # cnn        = exige o modelo neural; se não carregar, o nó não sobe
+  tipo: auto
+  modelo: null   # ex: modelos/classificador-2026-09.pt
+
 sonometro:
   # ausente = nenhum instrumento instalado (o normal em modo=triagem)
   # mock    = valores simulados, para desenvolver sem o equipamento

@@ -172,6 +172,31 @@ class ConfigSonometro:
 
 
 @dataclass(frozen=True)
+class ConfigClassificador:
+    """Qual classificador de assinatura acústica o nó usa.
+
+    `auto` prefere o modelo neural e cai para o classificador de referência se
+    ele não carregar — degradação registrada, nunca silenciosa (D8). `cnn`
+    exige o modelo: se não carregar, o nó não sobe, que é o certo quando alguém
+    declarou explicitamente que quer aquele modelo em produção.
+    """
+
+    tipo: str = "auto"
+    modelo: str | None = None
+
+    def validar(self) -> None:
+        tipos = ("auto", "heuristico", "cnn")
+        if self.tipo not in tipos:
+            raise ConfiguracaoInvalida(
+                f"classificador.tipo: use um de {tipos}, recebi {self.tipo!r}"
+            )
+        if self.tipo == "cnn" and not self.modelo:
+            raise ConfiguracaoInvalida(
+                "classificador.modelo é obrigatório quando tipo='cnn'"
+            )
+
+
+@dataclass(frozen=True)
 class ConfigAutuacao:
     """Declaração exigida para habilitar `modo=autuacao`.
 
@@ -198,6 +223,7 @@ class ConfigNo:
     audio: ConfigAudio = field(default_factory=ConfigAudio)
     array: ConfigArray = field(default_factory=ConfigArray)
     sonometro: ConfigSonometro = field(default_factory=ConfigSonometro)
+    classificador: ConfigClassificador = field(default_factory=ConfigClassificador)
     autuacao: ConfigAutuacao | None = None
 
     def validar(self) -> None:
@@ -209,6 +235,7 @@ class ConfigNo:
         self.audio.validar()
         self.array.validar()
         self.sonometro.validar()
+        self.classificador.validar()
 
         if self.audio.canais != self.array.n_microfones:
             raise ConfiguracaoInvalida(
@@ -348,6 +375,11 @@ def de_dict(dados: dict[str, Any]) -> ConfigNo:
     sonometro = ConfigSonometro(
         **_apenas_campos(ConfigSonometro, dict(dados.get("sonometro") or {}), "sonometro")
     )
+    classificador = ConfigClassificador(
+        **_apenas_campos(
+            ConfigClassificador, dict(dados.get("classificador") or {}), "classificador"
+        )
+    )
 
     autuacao = None
     bloco_autuacao = dados.get("autuacao")
@@ -384,6 +416,7 @@ def de_dict(dados: dict[str, Any]) -> ConfigNo:
         audio=audio,
         array=array,
         sonometro=sonometro,
+        classificador=classificador,
         autuacao=autuacao,
     )
     config.validar()
