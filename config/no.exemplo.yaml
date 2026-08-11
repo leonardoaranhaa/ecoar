@@ -1,0 +1,151 @@
+# Configuração de exemplo de um nó ECOAR.
+# Copie para config/no-<identificador>.yaml e ajuste. Segredo não entra aqui:
+# use ${VARIAVEL} ou ${VARIAVEL:-padrao} e defina no ambiente do nó.
+
+# A chave vai entre aspas de propósito: `no` sem aspas é booleano em YAML.
+"no":
+  id: "bauru-ponte-sao-joao-01"
+  descricao: "Poste do lado ímpar, sentido centro"
+  geolocalizacao:
+    latitude: -22.3145
+    longitude: -49.0600
+
+# triagem = priorização de fiscalização (único modo liberado hoje).
+# autuacao exige o bloco 'autuacao' completo e instrumento Classe 1 real.
+# Ver docs/legal/inmetro.md.
+modo: triagem
+
+audio:
+  taxa_amostragem: 48000
+  canais: 4
+  buffer_segundos: 30
+  bloco_amostras: 4096
+
+  fonte:
+    # i2s      = array real no Raspberry Pi (exige requirements-hardware.txt)
+    # wav      = arquivo multicanal, para rodar gravação de campo pela cadeia
+    # sintetica = cena de bancada, sem hardware nenhum
+    tipo: sintetica
+    dispositivo: null       # nome/índice do dispositivo ALSA, quando tipo=i2s
+    caminho: null           # arquivo .wav, quando tipo=wav
+    laco: false
+    tempo_real: true
+    perfil: escapamento     # cena sintética: escapamento|buzina|obra|trovao|ambiente
+    azimute_graus: 45.0
+
+  calibracao:
+    # Converte dBFS do array em dB SPL estimado. NÃO é calibração metrológica:
+    # o valor resultante carrega valor_legal=false em toda a evidência.
+    offset_db: 94.0
+    ponderacao: A
+    referencia: "sem campanha de calibração registrada"
+    medido_em: null
+
+array:
+  # Precisa bater com a montagem física, medida com régua. Erro aqui vira erro
+  # sistemático de ângulo em todos os eventos deste nó.
+  geometria: circular
+  raio_m: 0.045
+  n_microfones: 4
+  azimute_offset_graus: 0.0
+  velocidade_som_ms: 343.0
+
+gatilho:
+  # Limiares da decisão de acionamento. São por nó: uma via de tráfego pesado
+  # tem piso de ruído diferente de uma rua residencial.
+  #
+  # A versão da política é gravada em CADA evento. Mudou limiar, muda a versão —
+  # senão é impossível responder depois por que um evento acionou e outro não.
+  versao_politica: "politica/1.0"
+  spl_db_minimo: 75.0          # pré-gatilho barato, estimativa do array
+  score_aciona: 0.80           # acima disso, e com o resto atendido, dispara
+  score_ambiguo: 0.45          # entre os dois, registra sem acionar a câmera
+  doa_confianca_minima: 0.50
+  doa_margem_maxima_graus: 15.0
+  azimute_camera_graus: 0.0    # para onde a câmera aponta, na convenção do array
+  campo_visao_graus: 90.0
+  # Janela do evento. audio.buffer_segundos precisa cobrir a soma, com folga —
+  # o carregador recusa a configuracao se nao cobrir.
+  janela_antes_s: 10.0
+  janela_depois_s: 10.0
+
+camera:
+  tipo: mock                   # mock | opencv
+  dispositivo: 0
+  largura: 1920
+  altura: 1080
+  aquecimento_quadros: 3       # os primeiros quadros saem com exposição errada
+  diretorio: "dados/capturas"
+
+uplink:
+  # Endereço do backend. HTTP sem TLS só é aceito para endereço local: um nó em
+  # poste transmite por 4G, e evidência não trafega em claro.
+  url: "https://ecoar.exemplo.br"
+  # Vazio no exemplo para o arquivo carregar sem variável definida. O nó recusa
+  # subir com token vazio quando o uplink está ligado.
+  token: "${ECOAR_TOKEN_NO:-}"
+  fila: "dados/fila-uplink.db"
+  diretorio_pacotes: "dados/pacotes"
+  intervalo_s: 2.0
+  timeout_s: 30.0
+  tentativas_maximas: 12
+  heartbeat_s: 300.0
+  apagar_apos_envio: true
+
+tamper:
+  # Antifurto. Limiares por sensor, para vento e vibração de tráfego não virarem
+  # alarme falso. Ver edge/tamper_detection/README.md.
+  habilitado: true
+  inercial: simulado      # simulado | mpu6050
+  abertura: simulado      # simulado | gpio
+  alimentacao: simulado   # simulado | ina219
+  pino_reed: 17
+  impacto_g: 2.5          # pico de aceleração; 1 g é só a gravidade parado
+  inclinacao_graus: 20.0  # desvio em relação à posição de instalação
+  rotacao_dps: 40.0       # rotação contínua = equipamento sendo carregado
+  intervalo_leitura_s: 0.1
+  manutencao_max_s: 1800  # o modo manutenção expira sozinho neste teto
+
+retencao:
+  # Prazos por finalidade — ver docs/legal/lgpd.md. Viajam dentro de cada
+  # pacote de evidência: quem recebe vê sob qual política ele foi gerado.
+  metadado_dias: 730
+  midia_pendente_dias: 30
+  midia_confirmada_dias: 180
+  midia_rejeitada_dias: 7
+  treino_dias: 1095
+
+classificador:
+  # auto       = usa o modelo neural se ele carregar, senão cai para o
+  #              classificador de referência e registra a degradação
+  # heuristico = só o classificador de referência (regras explícitas)
+  # cnn        = exige o modelo neural; se não carregar, o nó não sobe
+  tipo: auto
+  modelo: null   # ex: modelos/classificador-2026-09.pt
+
+sonometro:
+  # ausente = nenhum instrumento instalado (o normal em modo=triagem)
+  # mock    = valores simulados, para desenvolver sem o equipamento
+  # serial  = instrumento real por porta serial (ver edge/audio_capture/sonometro.py)
+  tipo: ausente
+  porta: null
+  baud: 9600
+  timeout_s: 2.0
+  comando: null
+  modelo: null
+  fabricante: null
+  classe: null
+  certificado: null
+  validade_calibracao: null
+
+# Só preencher quando houver regulamentação federal que valide autuação
+# automática por ruído. Sem este bloco completo, modo=autuacao é recusado.
+#
+# autuacao:
+#   habilitada_por: "nome e cargo de quem autorizou"
+#   base_normativa: "norma federal que valida a autuação automática"
+#   instrumento_certificado:
+#     modelo: "..."
+#     classe: 1
+#     certificado: "número do certificado"
+#     validade_calibracao: "AAAA-MM-DD"

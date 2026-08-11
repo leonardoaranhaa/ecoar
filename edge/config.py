@@ -1,0 +1,647 @@
+"""Configuração do nó de campo.
+
+Fail-closed por desenho: configuração inválida aborta a inicialização em vez de
+assumir um padrão conveniente. E `modo=autuacao` só carrega com declaração
+completa de base normativa e instrumento certificado — ver docs/legal/inmetro.md.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+MODO_TRIAGEM = "triagem"
+MODO_AUTUACAO = "autuacao"
+MODOS = (MODO_TRIAGEM, MODO_AUTUACAO)
+
+PONDERACOES = ("A", "Z")
+
+_ENV = re.compile(r"^\$\{([A-Z0-9_]+)(?::-(.*))?\}$")
+
+
+class ConfiguracaoInvalida(RuntimeError):
+    """Configuração recusada. O nó não sobe."""
+
+
+@dataclass(frozen=True)
+class Geolocalizacao:
+    latitude: float
+    longitude: float
+
+    def como_dict(self) -> dict[str, float]:
+        return {"latitude": self.latitude, "longitude": self.longitude}
+
+
+@dataclass(frozen=True)
+class ConfigArray:
+    """Geometria física do array, medida na montagem — não é constante de código.
+
+    O raio precisa bater com a régua. Erro aqui vira erro sistemático de ângulo
+    em todos os eventos do nó, e é a causa mais comum de "o ângulo está sempre
+    errado mesmo com áudio limpo".
+    """
+
+    geometria: str = "circular"
+    raio_m: float = 0.045
+    n_microfones: int = 4
+    azimute_offset_graus: float = 0.0
+    velocidade_som_ms: float = 343.0
+
+    def validar(self) -> None:
+        if self.geometria != "circular":
+            raise ConfiguracaoInvalida(
+                f"array.geometria: só 'circular' é suportada hoje, recebi {self.geometria!r}"
+            )
+        if self.raio_m <= 0:
+            raise ConfiguracaoInvalida("array.raio_m precisa ser maior que zero")
+        if self.n_microfones < 3:
+            raise ConfiguracaoInvalida(
+                "array.n_microfones: são necessários pelo menos 3 microfones para "
+                "estimar azimute sem ambiguidade"
+            )
+        if self.velocidade_som_ms <= 0:
+            raise ConfiguracaoInvalida("array.velocidade_som_ms precisa ser maior que zero")
+
+
+@dataclass(frozen=True)
+class ConfigCalibracao:
+    """Converte dBFS do array em dB SPL estimado.
+
+    Isto NÃO é calibração metrológica. É o ajuste de uma campanha de referência,
+    e o valor resultante carrega `valor_legal: false` em todo lugar por onde
+    passa (decisão D3).
+    """
+
+    offset_db: float = 94.0
+    ponderacao: str = "A"
+    referencia: str = "sem campanha de calibração registrada"
+    medido_em: str | None = None
+
+    def validar(self) -> None:
+        if self.ponderacao not in PONDERACOES:
+            raise ConfiguracaoInvalida(
+                f"audio.calibracao.ponderacao: use 'A' ou 'Z', recebi {self.ponderacao!r}"
+            )
+
+
+@dataclass(frozen=True)
+class ConfigFonte:
+    tipo: str = "sintetica"
+    dispositivo: str | int | None = None
+    caminho: str | None = None
+    laco: bool = False
+    tempo_real: bool = True
+    perfil: str = "ambiente"
+    azimute_graus: float = 45.0
+
+    def validar(self) -> None:
+        tipos = ("i2s", "wav", "sintetica")
+        if self.tipo not in tipos:
+            raise ConfiguracaoInvalida(
+                f"audio.fonte.tipo: use um de {tipos}, recebi {self.tipo!r}"
+            )
+        if self.tipo == "wav" and not self.caminho:
+            raise ConfiguracaoInvalida("audio.fonte.caminho é obrigatório quando tipo='wav'")
+
+
+@dataclass(frozen=True)
+class ConfigAudio:
+    taxa_amostragem: int = 48000
+    canais: int = 4
+    buffer_segundos: float = 30.0
+    bloco_amostras: int = 4096
+    fonte: ConfigFonte = field(default_factory=ConfigFonte)
+    calibracao: ConfigCalibracao = field(default_factory=ConfigCalibracao)
+
+    def validar(self) -> None:
+        if self.taxa_amostragem <= 0:
+            raise ConfiguracaoInvalida("audio.taxa_amostragem precisa ser maior que zero")
+        if self.canais < 1:
+            raise ConfiguracaoInvalida("audio.canais precisa ser pelo menos 1")
+        if self.buffer_segundos < 1:
+            raise ConfiguracaoInvalida(
+                "audio.buffer_segundos: o buffer precisa cobrir a janela de evento "
+                "inteira (10 s antes + 10 s depois do pico), com folga"
+            )
+        if self.bloco_amostras <= 0:
+            raise ConfiguracaoInvalida("audio.bloco_amostras precisa ser maior que zero")
+        self.fonte.validar()
+        self.calibracao.validar()
+
+
+@dataclass(frozen=True)
+class ConfigSonometro:
+    """Instrumento de medição — camada de adaptação, decisão D5.
+
+    `tipo` escolhe a implementação de `SonometroReader`. Trocar de modelo de
+    instrumento mexe aqui e em uma classe de `sonometro.py`. Em nenhum outro
+    lugar.
+    """
+
+    tipo: str = "ausente"
+    porta: str | None = None
+    baud: int = 9600
+    timeout_s: float = 2.0
+    comando: str | None = None
+    modelo: str | None = None
+    fabricante: str | None = None
+    classe: int | None = None
+    certificado: str | None = None
+    validade_calibracao: str | None = None
+
+    def validar(self) -> None:
+        tipos = ("ausente", "mock", "serial")
+        if self.tipo not in tipos:
+            raise ConfiguracaoInvalida(
+                f"sonometro.tipo: use um de {tipos}, recebi {self.tipo!r}"
+            )
+        if self.tipo == "serial" and not self.porta:
+            raise ConfiguracaoInvalida("sonometro.porta é obrigatória quando tipo='serial'")
+        if self.classe is not None and self.classe not in (1, 2):
+            raise ConfiguracaoInvalida("sonometro.classe: use 1 ou 2 (IEC 61672)")
+
+    @property
+    def tem_valor_legal(self) -> bool:
+        """Só um instrumento real, Classe 1 e com certificado declarado."""
+        return self.tipo == "serial" and self.classe == 1 and bool(self.certificado)
+
+
+@dataclass(frozen=True)
+class ConfigTamper:
+    """Antifurto. Limiares próprios por sensor, para não confundir vento e
+    vibração de tráfego com violação."""
+
+    habilitado: bool = True
+    inercial: str = "simulado"  # simulado | mpu6050
+    abertura: str = "simulado"  # simulado | gpio
+    alimentacao: str = "simulado"  # simulado | ina219
+    pino_reed: int = 17
+    impacto_g: float = 2.5
+    inclinacao_graus: float = 20.0
+    rotacao_dps: float = 40.0
+    intervalo_leitura_s: float = 0.1
+    heartbeat_s: float = 300.0
+    manutencao_max_s: float = 1800.0
+
+    def validar(self) -> None:
+        for campo, valores in (
+            ("inercial", ("simulado", "mpu6050")),
+            ("abertura", ("simulado", "gpio")),
+            ("alimentacao", ("simulado", "ina219")),
+        ):
+            if getattr(self, campo) not in valores:
+                raise ConfiguracaoInvalida(
+                    f"tamper.{campo}: use um de {valores}, recebi {getattr(self, campo)!r}"
+                )
+        if self.impacto_g <= 1.0:
+            raise ConfiguracaoInvalida(
+                "tamper.impacto_g precisa ser > 1 g (1 g é só a gravidade parado)"
+            )
+        if self.manutencao_max_s <= 0:
+            raise ConfiguracaoInvalida("tamper.manutencao_max_s precisa ser positivo")
+
+
+@dataclass(frozen=True)
+class ConfigUplink:
+    """Envio ao backend. O token vem do ambiente, nunca do arquivo."""
+
+    url: str = "http://127.0.0.1:8000"
+    token: str = ""
+    fila: str = "dados/fila-uplink.db"
+    intervalo_s: float = 2.0
+    timeout_s: float = 30.0
+    tentativas_maximas: int = 12
+    heartbeat_s: float = 300.0
+    apagar_apos_envio: bool = True
+    diretorio_pacotes: str = "dados/pacotes"
+
+    def validar(self) -> None:
+        if not self.url.startswith(("http://", "https://")):
+            raise ConfiguracaoInvalida(f"uplink.url inválida: {self.url!r}")
+        if self.url.startswith("http://") and not _e_local(self.url):
+            raise ConfiguracaoInvalida(
+                "uplink.url: HTTP sem TLS só é aceito para endereço local. Um nó "
+                "em poste transmite por 4G, e evidência não trafega em claro."
+            )
+        if self.intervalo_s <= 0 or self.timeout_s <= 0:
+            raise ConfiguracaoInvalida("uplink: intervalo e timeout precisam ser positivos")
+        if self.heartbeat_s < 30:
+            raise ConfiguracaoInvalida(
+                "uplink.heartbeat_s abaixo de 30 s gasta rádio e bateria sem ganho"
+            )
+
+
+def _e_local(url: str) -> bool:
+    resto = url.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0]
+    return resto in ("localhost", "127.0.0.1", "::1") or resto.startswith("192.168.")
+
+
+@dataclass(frozen=True)
+class ConfigRetencao:
+    """Prazos por finalidade — ver docs/legal/lgpd.md.
+
+    Viaja dentro de cada pacote de evidência de propósito: quem recebe o pacote
+    consegue ver sob qual política ele foi gerado, sem depender de consultar o
+    nosso sistema.
+    """
+
+    metadado_dias: int = 730
+    midia_pendente_dias: int = 30
+    midia_confirmada_dias: int = 180
+    midia_rejeitada_dias: int = 7
+    treino_dias: int = 1095
+
+    def validar(self) -> None:
+        for campo, valor in (
+            ("metadado_dias", self.metadado_dias),
+            ("midia_pendente_dias", self.midia_pendente_dias),
+            ("midia_confirmada_dias", self.midia_confirmada_dias),
+            ("midia_rejeitada_dias", self.midia_rejeitada_dias),
+            ("treino_dias", self.treino_dias),
+        ):
+            if valor <= 0:
+                raise ConfiguracaoInvalida(f"retencao.{campo} precisa ser positivo")
+        if self.midia_rejeitada_dias > self.midia_pendente_dias:
+            raise ConfiguracaoInvalida(
+                "retencao: evento rejeitado não pode ser guardado por mais tempo que "
+                "um evento ainda pendente — ele não virou prova nem vira treino"
+            )
+
+    def como_dict(self) -> dict[str, int]:
+        return {
+            "metadado_dias": self.metadado_dias,
+            "midia_pendente_dias": self.midia_pendente_dias,
+            "midia_confirmada_dias": self.midia_confirmada_dias,
+            "midia_rejeitada_dias": self.midia_rejeitada_dias,
+            "treino_dias": self.treino_dias,
+        }
+
+
+@dataclass(frozen=True)
+class ConfigGatilho:
+    """Limiares da decisão de acionamento.
+
+    São por nó, não constantes de código: uma via de tráfego pesado tem piso de
+    ruído diferente de uma rua residencial, e o campo de visão depende de como a
+    câmera foi apontada naquele poste.
+
+    `versao_politica` é gravada em cada evento. Mudar limiar sem mudar a versão
+    quebra a reprodutibilidade da decisão — que é o que sustenta o argumento de
+    determinismo perante contestação.
+    """
+
+    versao_politica: str = "politica/1.0"
+    spl_db_minimo: float = 75.0
+    score_aciona: float = 0.80
+    score_ambiguo: float = 0.45
+    doa_confianca_minima: float = 0.50
+    doa_margem_maxima_graus: float = 15.0
+    azimute_camera_graus: float = 0.0
+    campo_visao_graus: float = 90.0
+    janela_antes_s: float = 10.0
+    janela_depois_s: float = 10.0
+
+    def validar(self) -> None:
+        if not 0.0 < self.score_ambiguo < self.score_aciona <= 1.0:
+            raise ConfiguracaoInvalida(
+                "gatilho: é preciso 0 < score_ambiguo < score_aciona <= 1; recebi "
+                f"ambiguo={self.score_ambiguo}, aciona={self.score_aciona}"
+            )
+        if not 0.0 <= self.doa_confianca_minima <= 1.0:
+            raise ConfiguracaoInvalida("gatilho.doa_confianca_minima precisa estar entre 0 e 1")
+        if not 0.0 < self.campo_visao_graus <= 360.0:
+            raise ConfiguracaoInvalida("gatilho.campo_visao_graus precisa estar entre 0 e 360")
+        if self.doa_margem_maxima_graus <= 0:
+            raise ConfiguracaoInvalida("gatilho.doa_margem_maxima_graus precisa ser positiva")
+        if self.janela_antes_s <= 0 or self.janela_depois_s <= 0:
+            raise ConfiguracaoInvalida("gatilho: a janela do evento precisa ser positiva")
+
+    @property
+    def janela_total_s(self) -> float:
+        return self.janela_antes_s + self.janela_depois_s
+
+
+@dataclass(frozen=True)
+class ConfigCamera:
+    tipo: str = "mock"
+    dispositivo: str | int | None = 0
+    largura: int = 1920
+    altura: int = 1080
+    aquecimento_quadros: int = 3
+    diretorio: str = "dados/capturas"
+
+    def validar(self) -> None:
+        tipos = ("mock", "opencv")
+        if self.tipo not in tipos:
+            raise ConfiguracaoInvalida(f"camera.tipo: use um de {tipos}, recebi {self.tipo!r}")
+        if self.largura < 320 or self.altura < 240:
+            raise ConfiguracaoInvalida(
+                "camera: resolução abaixo de 320x240 não lê placa a distância nenhuma"
+            )
+
+
+@dataclass(frozen=True)
+class ConfigClassificador:
+    """Qual classificador de assinatura acústica o nó usa.
+
+    `auto` prefere o modelo neural e cai para o classificador de referência se
+    ele não carregar — degradação registrada, nunca silenciosa (D8). `cnn`
+    exige o modelo: se não carregar, o nó não sobe, que é o certo quando alguém
+    declarou explicitamente que quer aquele modelo em produção.
+    """
+
+    tipo: str = "auto"
+    modelo: str | None = None
+
+    def validar(self) -> None:
+        tipos = ("auto", "heuristico", "cnn")
+        if self.tipo not in tipos:
+            raise ConfiguracaoInvalida(
+                f"classificador.tipo: use um de {tipos}, recebi {self.tipo!r}"
+            )
+        if self.tipo == "cnn" and not self.modelo:
+            raise ConfiguracaoInvalida(
+                "classificador.modelo é obrigatório quando tipo='cnn'"
+            )
+
+
+@dataclass(frozen=True)
+class ConfigAutuacao:
+    """Declaração exigida para habilitar `modo=autuacao`.
+
+    Existe para que ligar a autuação seja um ato registrado, com nome de quem
+    autorizou e norma que sustenta — não uma linha trocada num arquivo.
+    """
+
+    habilitada_por: str
+    base_normativa: str
+    instrumento_modelo: str
+    instrumento_classe: int
+    instrumento_certificado: str
+    validade_calibracao: str
+
+
+@dataclass(frozen=True)
+class ConfigNo:
+    id: str
+    descricao: str = ""
+    geolocalizacao: Geolocalizacao = field(
+        default_factory=lambda: Geolocalizacao(0.0, 0.0)
+    )
+    modo: str = MODO_TRIAGEM
+    audio: ConfigAudio = field(default_factory=ConfigAudio)
+    array: ConfigArray = field(default_factory=ConfigArray)
+    sonometro: ConfigSonometro = field(default_factory=ConfigSonometro)
+    classificador: ConfigClassificador = field(default_factory=ConfigClassificador)
+    gatilho: ConfigGatilho = field(default_factory=ConfigGatilho)
+    camera: ConfigCamera = field(default_factory=ConfigCamera)
+    retencao: ConfigRetencao = field(default_factory=ConfigRetencao)
+    uplink: ConfigUplink = field(default_factory=ConfigUplink)
+    tamper: ConfigTamper = field(default_factory=ConfigTamper)
+    autuacao: ConfigAutuacao | None = None
+
+    def validar(self) -> None:
+        if not self.id or not self.id.strip():
+            raise ConfiguracaoInvalida("no.id é obrigatório — é o que identifica o nó na evidência")
+        if self.modo not in MODOS:
+            raise ConfiguracaoInvalida(f"modo: use um de {MODOS}, recebi {self.modo!r}")
+
+        self.audio.validar()
+        self.array.validar()
+        self.sonometro.validar()
+        self.classificador.validar()
+        self.gatilho.validar()
+        self.camera.validar()
+        self.retencao.validar()
+        self.uplink.validar()
+        self.tamper.validar()
+
+        if self.audio.canais != self.array.n_microfones:
+            raise ConfiguracaoInvalida(
+                f"audio.canais ({self.audio.canais}) difere de array.n_microfones "
+                f"({self.array.n_microfones}) — a localização direcional produziria "
+                "ângulo errado sem avisar"
+            )
+
+        folga = 2.0
+        if self.audio.buffer_segundos < self.gatilho.janela_total_s + folga:
+            raise ConfiguracaoInvalida(
+                f"audio.buffer_segundos ({self.audio.buffer_segundos:.0f} s) nao cobre a "
+                f"janela do evento ({self.gatilho.janela_total_s:.0f} s) com folga de "
+                f"{folga:.0f} s. O trecho anterior ao pico ja teria saido do anel quando "
+                "o sistema fosse busca-lo — e o evento chegaria truncado, sem aviso."
+            )
+
+        if self.modo == MODO_AUTUACAO:
+            self._validar_autuacao()
+
+    def _validar_autuacao(self) -> None:
+        if self.autuacao is None:
+            raise ConfiguracaoInvalida(
+                "modo=autuacao exige o bloco 'autuacao' completo (quem habilitou, base "
+                "normativa e instrumento certificado). Ver docs/legal/inmetro.md"
+            )
+        if self.autuacao.instrumento_classe != 1:
+            raise ConfiguracaoInvalida(
+                "modo=autuacao exige instrumento Classe 1 (IEC 61672); "
+                f"foi declarada Classe {self.autuacao.instrumento_classe}"
+            )
+        if not self.sonometro.tem_valor_legal:
+            raise ConfiguracaoInvalida(
+                "modo=autuacao exige um SonometroReader real, Classe 1 e com certificado "
+                f"declarado — a configuração atual é sonometro.tipo={self.sonometro.tipo!r}, "
+                f"classe={self.sonometro.classe!r}. O array MEMS não substitui medição "
+                "legal (docs/legal/inmetro.md)"
+            )
+
+    @property
+    def em_triagem(self) -> bool:
+        return self.modo == MODO_TRIAGEM
+
+    def resumo(self) -> dict[str, Any]:
+        """Resumo estável para gravar em evidência e em log de inicialização."""
+        return {
+            "no_id": self.id,
+            "modo": self.modo,
+            "geolocalizacao": self.geolocalizacao.como_dict(),
+            "taxa_amostragem": self.audio.taxa_amostragem,
+            "canais": self.audio.canais,
+            "array": {
+                "geometria": self.array.geometria,
+                "raio_m": self.array.raio_m,
+                "n_microfones": self.array.n_microfones,
+                "azimute_offset_graus": self.array.azimute_offset_graus,
+            },
+            "calibracao": {
+                "offset_db": self.audio.calibracao.offset_db,
+                "ponderacao": self.audio.calibracao.ponderacao,
+                "referencia": self.audio.calibracao.referencia,
+                "medido_em": self.audio.calibracao.medido_em,
+            },
+            "sonometro": {
+                "tipo": self.sonometro.tipo,
+                "modelo": self.sonometro.modelo,
+                "classe": self.sonometro.classe,
+                "valor_legal": self.sonometro.tem_valor_legal,
+            },
+        }
+
+
+def _resolver_env(valor: Any) -> Any:
+    """Expande `${VAR}` e `${VAR:-padrao}` — segredo não mora no arquivo."""
+    if not isinstance(valor, str):
+        return valor
+    achado = _ENV.match(valor.strip())
+    if not achado:
+        return valor
+    nome, padrao = achado.group(1), achado.group(2)
+    obtido = os.environ.get(nome)
+    if obtido is not None:
+        return obtido
+    if padrao is not None:
+        return padrao
+    raise ConfiguracaoInvalida(
+        f"variável de ambiente {nome} não definida e sem valor padrão na configuração"
+    )
+
+
+def _percorrer(dados: Any) -> Any:
+    if isinstance(dados, dict):
+        return {k: _percorrer(v) for k, v in dados.items()}
+    if isinstance(dados, list):
+        return [_percorrer(v) for v in dados]
+    return _resolver_env(dados)
+
+
+def _apenas_campos(cls: type, dados: dict[str, Any], onde: str) -> dict[str, Any]:
+    """Recusa chave desconhecida em vez de ignorar em silêncio.
+
+    Um typo em `bufer_segundos` que passa despercebido vira um nó rodando com
+    buffer padrão e ninguém sabendo por quê.
+    """
+    validos = {f.name for f in cls.__dataclass_fields__.values()}
+    desconhecidos = set(dados) - validos
+    if desconhecidos:
+        raise ConfiguracaoInvalida(
+            f"{onde}: chave(s) desconhecida(s) {sorted(desconhecidos)}; "
+            f"esperava {sorted(validos)}"
+        )
+    return dados
+
+
+def de_dict(dados: dict[str, Any]) -> ConfigNo:
+    dados = _percorrer(dados or {})
+
+    # `no:` sem aspas vira a chave booleana False no YAML 1.1 (a mesma regra que
+    # transforma `yes`/`on` em booleano). O bloco se chama "no" porque é o nome
+    # do domínio; aceitar as duas formas evita um erro confuso de "no.id é
+    # obrigatório" num arquivo que claramente tem o id.
+    bloco_no = dados.get("no") or dados.get(False) or {}
+    if not isinstance(bloco_no, dict):
+        raise ConfiguracaoInvalida("bloco 'no' precisa ser um mapa")
+
+    geo = bloco_no.get("geolocalizacao") or {}
+    geolocalizacao = Geolocalizacao(
+        latitude=float(geo.get("latitude", 0.0)),
+        longitude=float(geo.get("longitude", 0.0)),
+    )
+
+    bloco_audio = dict(dados.get("audio") or {})
+    fonte = ConfigFonte(**_apenas_campos(ConfigFonte, dict(bloco_audio.pop("fonte", {}) or {}), "audio.fonte"))
+    calibracao = ConfigCalibracao(
+        **_apenas_campos(
+            ConfigCalibracao, dict(bloco_audio.pop("calibracao", {}) or {}), "audio.calibracao"
+        )
+    )
+    audio = ConfigAudio(
+        fonte=fonte,
+        calibracao=calibracao,
+        **_apenas_campos(ConfigAudio, bloco_audio, "audio"),
+    )
+
+    array = ConfigArray(**_apenas_campos(ConfigArray, dict(dados.get("array") or {}), "array"))
+    sonometro = ConfigSonometro(
+        **_apenas_campos(ConfigSonometro, dict(dados.get("sonometro") or {}), "sonometro")
+    )
+    classificador = ConfigClassificador(
+        **_apenas_campos(
+            ConfigClassificador, dict(dados.get("classificador") or {}), "classificador"
+        )
+    )
+    gatilho = ConfigGatilho(
+        **_apenas_campos(ConfigGatilho, dict(dados.get("gatilho") or {}), "gatilho")
+    )
+    camera = ConfigCamera(
+        **_apenas_campos(ConfigCamera, dict(dados.get("camera") or {}), "camera")
+    )
+    retencao = ConfigRetencao(
+        **_apenas_campos(ConfigRetencao, dict(dados.get("retencao") or {}), "retencao")
+    )
+    uplink = ConfigUplink(
+        **_apenas_campos(ConfigUplink, dict(dados.get("uplink") or {}), "uplink")
+    )
+    tamper = ConfigTamper(
+        **_apenas_campos(ConfigTamper, dict(dados.get("tamper") or {}), "tamper")
+    )
+
+    autuacao = None
+    bloco_autuacao = dados.get("autuacao")
+    if bloco_autuacao:
+        instrumento = bloco_autuacao.get("instrumento_certificado") or {}
+        faltando = [
+            campo
+            for campo in ("habilitada_por", "base_normativa")
+            if not bloco_autuacao.get(campo)
+        ]
+        faltando += [
+            f"instrumento_certificado.{campo}"
+            for campo in ("modelo", "classe", "certificado", "validade_calibracao")
+            if not instrumento.get(campo)
+        ]
+        if faltando:
+            raise ConfiguracaoInvalida(
+                f"bloco 'autuacao' incompleto, faltando: {faltando}. Ver docs/legal/inmetro.md"
+            )
+        autuacao = ConfigAutuacao(
+            habilitada_por=str(bloco_autuacao["habilitada_por"]),
+            base_normativa=str(bloco_autuacao["base_normativa"]),
+            instrumento_modelo=str(instrumento["modelo"]),
+            instrumento_classe=int(instrumento["classe"]),
+            instrumento_certificado=str(instrumento["certificado"]),
+            validade_calibracao=str(instrumento["validade_calibracao"]),
+        )
+
+    config = ConfigNo(
+        id=str(bloco_no.get("id", "")),
+        descricao=str(bloco_no.get("descricao", "")),
+        geolocalizacao=geolocalizacao,
+        modo=str(dados.get("modo", MODO_TRIAGEM)),
+        audio=audio,
+        array=array,
+        sonometro=sonometro,
+        classificador=classificador,
+        gatilho=gatilho,
+        camera=camera,
+        retencao=retencao,
+        uplink=uplink,
+        tamper=tamper,
+        autuacao=autuacao,
+    )
+    config.validar()
+    return config
+
+
+def carregar(caminho: str | Path) -> ConfigNo:
+    caminho = Path(caminho)
+    if not caminho.exists():
+        raise ConfiguracaoInvalida(f"configuração não encontrada: {caminho}")
+    with caminho.open(encoding="utf-8") as arquivo:
+        dados = yaml.safe_load(arquivo)
+    if not isinstance(dados, dict):
+        raise ConfiguracaoInvalida(f"{caminho}: esperava um mapa YAML no topo do arquivo")
+    return de_dict(dados)

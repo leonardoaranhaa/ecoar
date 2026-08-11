@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Dados operacionais — nunca versionar
+dados/
+*.db
+*.db-journal
+*.ecoar
+*.wav
+*.pt
+!tests/dados/*.wav
+docs/field-notes/audio/

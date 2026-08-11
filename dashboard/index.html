@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ECOAR — plataforma de gestão</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%224%22 fill=%22%23FF6B35%22/%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2210%22 fill=%22none%22 stroke=%22%23F5A623%22 stroke-width=%222%22/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/estilo.css">
+</head>
+<body>
+
+<div id="acesso" class="acesso">
+  <form class="cartao-acesso" id="form-acesso">
+    <h1 class="marca">ECOAR</h1>
+    <p class="tagline">Ouve. Confirma. Prova.</p>
+    <label for="token">Token de operador</label>
+    <input id="token" type="password" autocomplete="current-password" required>
+    <button type="submit">Entrar</button>
+    <p class="erro" id="erro-acesso" hidden></p>
+    <p class="rodape-acesso">
+      Sistema em <strong>modo de triagem</strong>: os eventos confirmados
+      alimentam a priorização de fiscalização. Não geram autuação.
+    </p>
+  </form>
+</div>
+
+<div id="painel" hidden>
+  <aside class="lateral">
+    <div class="marca-lateral">
+      <span class="marca-pequena">ECOAR</span>
+      <span class="selo-modo" id="selo-modo">triagem</span>
+    </div>
+    <nav class="navegacao" id="navegacao"></nav>
+    <div class="rodape-lateral">
+      <span class="quem" id="quem"></span>
+      <button class="secundario" id="sair">Sair</button>
+    </div>
+  </aside>
+
+  <main class="conteudo" id="conteudo"></main>
+</div>
+
+<script src="/painel.js"></script>
+</body>
+</html>

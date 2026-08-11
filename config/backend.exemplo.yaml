@@ -1,0 +1,16 @@
+# Configuração de exemplo do backend.
+# Tokens NUNCA no arquivo: declare a variável de ambiente e referencie aqui.
+
+banco: "dados/ecoar.db"
+armazenamento: "dados/pacotes"
+tamanho_maximo_pacote_mb: 64
+
+# Um token por nó instalado. O token autentica o nó, e o backend confere que o
+# manifesto declara o mesmo nó — um nó não envia evento em nome de outro.
+tokens:
+  bauru-ponte-sao-joao-01: "${ECOAR_TOKEN_NO_01}"
+
+# Operadores do painel. Nome começando com "admin" recebe o perfil admin.
+tokens_operador:
+  operador-transito: "${ECOAR_TOKEN_OPERADOR}"
+  admin-studio-cerne: "${ECOAR_TOKEN_ADMIN}"
