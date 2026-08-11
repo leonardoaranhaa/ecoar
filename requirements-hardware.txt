@@ -1,0 +1,11 @@
+# Instalar APENAS no no de campo (Raspberry Pi CM4).
+# Nenhum modulo do ECOAR importa estas bibliotecas no topo do arquivo — todas
+# sao importadas sob demanda, dentro do driver especifico. Sem elas o sistema
+# roda inteiro em modo de simulacao.
+-r requirements.txt
+
+sounddevice>=0.4.6
+pyserial>=3.5
+smbus2>=0.4
+gpiozero>=2.0
+opencv-python>=4.9

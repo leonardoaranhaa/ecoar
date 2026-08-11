@@ -1,0 +1,10 @@
+# Nucleo — roda em qualquer maquina, inclusive sem hardware.
+numpy>=1.24
+PyYAML>=6.0
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+httpx>=0.27
+
+# Hardware do no de campo: pip install -r requirements-hardware.txt
+# Treino do classificador CNN: pip install torch

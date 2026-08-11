@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ecoar"
+version = "0.1.0"
+description = "ECOAR — fiscalizacao sonora inteligente: triagem e priorizacao de ocorrencias de ruido veicular"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "PyYAML>=6.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+# Dependencias que so existem no no de campo (Raspberry Pi CM4).
+hardware = [
+    "sounddevice>=0.4.6",   # captura I2S via ALSA
+    "pyserial>=3.5",        # instrumento de medicao por porta serial
+    "smbus2>=0.4",          # MPU-6050 via I2C
+    "gpiozero>=2.0",        # reed switch / GPIO
+    "opencv-python>=4.9",   # camera ANPR USB/CSI
+]
+# Treino do classificador CNN (roda em maquina de desenvolvimento, nao no no).
+treino = ["torch>=2.2"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+ecoar-no = "edge.main:cli"
+ecoar-backend = "backend.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["edge*", "backend*", "vision*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning:ecoar.*"]
