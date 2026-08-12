@@ -105,7 +105,10 @@ def _config_no(no: No) -> ConfigNo:
             "buffer_segundos": 8,
             "bloco_amostras": 1024,
             "fonte": {"tipo": "sintetica", "tempo_real": False, "perfil": "escapamento"},
-            "calibracao": {"offset_db": 94.0, "ponderacao": "A", "referencia": "demo"},
+            # Offset mais alto que o exemplo só para a faixa de dB da demo cobrir
+            # 74–94 dBA (o array é peaky; sem isso o teto satura em ~78). É
+            # calibração de demonstração, sem valor legal como todo SPL do array.
+            "calibracao": {"offset_db": 110.0, "ponderacao": "A", "referencia": "demo"},
         },
         "array": {"raio_m": 0.045, "n_microfones": 4},
         "gatilho": {"janela_antes_s": 2.0, "janela_depois_s": 2.0},
@@ -115,35 +118,76 @@ def _config_no(no: No) -> ConfigNo:
 
 
 def _janela_evento(instante_pico: float, spl_db: float) -> JanelaEvento:
-    """Dois segundos de tom, quatro canais — o suficiente para o pacote real.
+    """Dois segundos de nota de escapamento, quatro canais — o pacote real.
 
-    O nível é escalado para o SPL estimado bater com o alvo do evento, porque a
-    demo mostra o dB na tela e um valor plausível conta a história certa.
+    Escapamento é rico em harmônicos, não um tom puro: a série harmônica de um
+    fundamental de motor (~92 Hz) tem energia no meio do espectro, onde a
+    ponderação A pesa. Um seno de 92 Hz sozinho perderia ~30 dB na ponderação e
+    nunca cruzaria o piso do nó. Com os harmônicos, o nível estimado bate com o
+    alvo do evento — o que faz o dB na tela e a decisão de acionamento serem
+    plausíveis.
     """
     t = np.arange(TAXA * 2) / TAXA
-    amplitude = float(np.clip(10 ** ((spl_db - 94.0) / 20.0), 0.02, 0.98))
-    onda = amplitude * np.sin(2 * np.pi * 92.0 * t)
-    amostras = onda[:, None].repeat(4, axis=1).astype(np.float32)
+    onda = np.zeros_like(t)
+    for n in range(1, 17):
+        onda += (1.0 / n) * np.sin(2 * np.pi * 92.0 * n * t)
+    onda /= np.max(np.abs(onda))
+
+    # Mesmo offset da calibração do nó (110), para o SPL estimado cobrir a faixa
+    # 74–94 dBA em vez de saturar em ~78. Sem valor legal, como todo array MEMS.
+    calib = ConfigCalibracao(offset_db=110.0)
+    ganho = _ganho_para_spl(onda, spl_db, calib)
+    amostras = (ganho * onda)[:, None].repeat(4, axis=1).astype(np.float32)
     return JanelaEvento(
         janela=Janela(amostras, TAXA, instante_pico - 1.0, instante_pico + 1.0),
-        spl=estimar(amostras, TAXA, ConfigCalibracao()),
+        spl=estimar(amostras, TAXA, calib),
         instante_pico=instante_pico,
         sonometro=None,
         motivo_sem_sonometro="sem instrumento em modo de triagem",
     )
 
 
+def _ganho_para_spl(onda, alvo_db, calib) -> float:
+    """Busca o ganho que faz o SPL estimado (ponderado A) bater com o alvo.
+
+    estimar() aplica ponderação e offset; resolver o ganho de forma fechada
+    daria conta, mas uma busca binária de meia dúzia de passos é mais simples e
+    à prova de mudança na cadeia de estimativa.
+    """
+    baixo, alto = 1e-4, 0.98
+    for _ in range(24):
+        meio = (baixo + alto) / 2.0
+        amostras = (meio * onda)[:, None].repeat(4, axis=1).astype(np.float32)
+        if estimar(amostras, TAXA, calib).db < alvo_db:
+            baixo = meio
+        else:
+            alto = meio
+    return (baixo + alto) / 2.0
+
+
 def _predicao(score: float) -> Predicao:
     resto = (1.0 - score) / (len(CLASSES) - 1)
     scores = {c: resto for c in CLASSES}
     scores[CLASSE_ALVO] = score
+    # A explicação acompanha a força do sinal: um score alto tem série harmônica
+    # e estalos claros; um score médio é o caso que o operador precisa julgar.
+    # O "porquê" varia por evento em vez de repetir a mesma frase.
+    if score >= 0.88:
+        explicacao = ("fundamental grave de motor (~88 Hz), série harmônica forte "
+                      "e estalos de escape repetidos — assinatura típica de escapamento aberto")
+    elif score >= 0.80:
+        explicacao = ("harmônicos de motor presentes e nível acima do piso, mas com "
+                      "ruído de fundo — dentro do limiar de acionamento")
+    else:
+        explicacao = ("traços de escapamento presentes, porém série harmônica fraca e "
+                      "intermitente — compatível com revisão, abaixo do limiar de acionamento")
     return Predicao(
         classe=CLASSE_ALVO if score >= 0.5 else "ambiente",
         score=max(scores.values()),
         scores=scores,
         modelo="heuristico",
         versao_modelo="heuristico/1.0-bancada",
-        explicacao="fundamental de motor, série harmônica forte",
+        explicacao=explicacao,
         descritores={"f0_hz": 88.0},
     )
 
@@ -210,9 +254,19 @@ def semear(config: ConfigBackend, cliente) -> dict:
 
             ids_backend = []
             for i in range(no.volume):
-                score = round(rng.uniform(0.62, 0.97), 3)
-                azimute = (no.azimute_base + rng.uniform(-25, 25)) % 360
-                spl_db = round(rng.uniform(78.0, 96.0), 1)
+                # ~40% dos eventos passam de frente para a câmera (fonte perto do
+                # eixo, score alto): esses acionam a câmera e carregam imagem. O
+                # resto vem de ângulo lateral ou score menor e entra como
+                # ambíguo, sem imagem — os dois estados que o operador revisa.
+                em_frente = rng.random() < 0.40
+                if em_frente:
+                    score = round(rng.uniform(0.85, 0.97), 3)
+                    azimute = rng.uniform(-35, 35) % 360
+                    spl_db = round(rng.uniform(80.0, 94.0), 1)
+                else:
+                    score = round(rng.uniform(0.62, 0.84), 3)
+                    azimute = (no.azimute_base + rng.uniform(-25, 25)) % 360
+                    spl_db = round(rng.uniform(74.0, 90.0), 1)
                 instante = _instante(rng, base)
                 evento_id = f"{no.id}-evt-{i:04d}"
 

@@ -396,3 +396,20 @@ justamente por **não** prometer o que não pode entregar.
 
 Opção A: sem custo de infra, e reaproveita todo o front-end já feito. É a
 próxima etapa de código natural, se você aprovar — e cabe numa sessão.
+
+## 12. Backlog de UX (pós-reunião)
+
+Itens levantados na avaliação da demo, para versões posteriores:
+
+- **Tour guiado no produto real.** A demo (Opção A) já traz um tour de primeiro
+  acesso que explica cada tela e o porquê de cada decisão. Portar para a B (o
+  dashboard real), guardando o "já vi" por usuário no backend em vez do
+  `localStorage`, e com um passo a mais quando a autuação estiver disponível.
+- **Dashboard mais completo.** O painel de hoje cobre o essencial do modo de
+  triagem (priorização, revisão, nós, violações, métricas, auditoria). Evoluções
+  previstas: visão consolidada por município (quando o multi-tenant entrar),
+  série temporal de tendência, comparação entre pontos, e o mapa geográfico da
+  seção 7. Nenhuma bloqueia o piloto; entram conforme o dado de campo justifica.
+- **"Porquê" já entregue.** Cada evento agora mostra, na B e na demo, o motivo
+  determinístico do nó (acionar/ambíguo/descartar) e o significado do status
+  (pendente/confirmado/rejeitado) — a leitura em uma frase pedida na avaliação.
