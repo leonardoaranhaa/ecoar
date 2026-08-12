@@ -158,6 +158,7 @@ LOGIN_DEMO = '''$("form-acesso").addEventListener("submit", (evento) => {
   estado.token = "demo";
   estado.eu = valor.includes("operador") ? D.eu_operador : D.eu_admin;
   abrirPainel();
+  setTimeout(() => window.__ecoarTour && window.__ecoarTour.aoEntrar(), 400);
 });'''
 
 RELATORIO_ORIG = '''async function exportarRelatorio() {
@@ -246,6 +247,203 @@ CSS_DEMO_EXTRA = '''
 FAIXA_DEMO = ('<div class="faixa-demo" title="Dados de exemplo — não é captura de campo">'
               'demonstração · dados de exemplo</div>')
 
+# ---------------------------------------------------------------------------
+# Tour guiado — só na demo, só no primeiro acesso (guardado no localStorage).
+# É o "modo TV de loja": explica cada tela e o porquê de cada coisa, ajudando o
+# apresentador. Fica por cima do painel real, como a faixa — não toca o dashboard.
+# ---------------------------------------------------------------------------
+TOUR_CSS = '''
+/* -- tour guiado (demonstração) ---------------------------------- */
+.tour-hi {
+  position: fixed; z-index: 200; border-radius: 8px; pointer-events: none;
+  box-shadow: 0 0 0 4px var(--laranja), 0 0 0 9999px rgba(6,8,10,0.74);
+  transition: all 0.25s ease;
+}
+.tour-card {
+  position: fixed; z-index: 201; width: min(340px, calc(100vw - 32px));
+  background: var(--superficie-alta); border: 1px solid var(--borda);
+  border-radius: 12px; padding: 18px 18px 16px; box-shadow: 0 16px 50px rgba(0,0,0,0.5);
+}
+.tour-card h4 { margin: 0 0 8px; font-family: var(--titulo); font-size: 16px; }
+.tour-card p { margin: 0 0 14px; font-size: 13.5px; color: var(--texto); line-height: 1.55; }
+.tour-card .passo-n { font-family: var(--mono); font-size: 11px; color: var(--texto-fraco); }
+.tour-botoes { display: flex; align-items: center; gap: 8px; }
+.tour-botoes .espaco { flex: 1; }
+.tour-botoes button { font-size: 13px; padding: 7px 14px; border-radius: 7px; }
+.tour-prox { background: var(--laranja); color: #17110d; font-weight: 700; border: none; }
+.tour-ant { background: transparent; border: 1px solid var(--borda); color: var(--texto-fraco); }
+.tour-pular { background: transparent; border: none; color: var(--texto-fraco); font-size: 12px; }
+.tour-pular:hover { color: var(--texto); }
+.tour-ajuda {
+  position: fixed; left: 18px; bottom: 18px; z-index: 120;
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--borda);
+  background: var(--superficie-alta); color: var(--ambar); font-size: 18px;
+  cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.tour-ajuda:hover { border-color: var(--ambar); }
+@media (prefers-reduced-motion: reduce) { .tour-hi { transition: none; } }
+'''
+
+TOUR_JS = r'''
+(function () {
+  "use strict";
+  const CHAVE = "ecoar-demo-tour-v1";
+  const $ = (id) => document.getElementById(id);
+
+  const passos = [
+    { alvo: ".marca-lateral", titulo: "Bem-vindo ao ECOAR",
+      corpo: "Plataforma de fiscalização sonora em <b>modo de triagem</b>: o sistema ouve, localiza e registra ocorrências de escapamento — e mostra à prefeitura onde e quando o problema é pior. Vou apresentar o essencial em um minuto." },
+    { tela: "priorizacao", alvo: ".heatmap", titulo: "Quando o problema é pior",
+      corpo: "Mapa de calor por dia da semana × hora, só de eventos <b>confirmados por operador</b>. É o que a prefeitura leva para a equipe de blitz — direciona a fiscalização humana que já existe." },
+    { tela: "priorizacao", alvo: ".bloco:last-of-type .tabela", titulo: "Onde o problema é pior",
+      corpo: "Os pontos ordenados por ocorrências confirmadas, nas três cidades. O produto responde <b>onde e quando</b> — não <b>quem</b>: em triagem, placa não é lida." },
+    { tela: "revisao", alvo: ".coluna-fila", titulo: "Toda ocorrência passa por um humano",
+      corpo: "Nenhum evento vira estatística sozinho. O operador revisa cada um antes de contar — é a regra que dá valor jurídico à evidência." },
+    { tela: "revisao", abrir: true, alvo: ".grade-medidas", titulo: "O que o nó mediu",
+      corpo: "Score do classificador, ângulo da fonte (com margem de erro) e nível sonoro. O nível vem do array e é <b>estimativa sem valor legal</b> — o sistema é honesto sobre isso na própria tela." },
+    { tela: "revisao", abrir: true, alvo: ".porque", titulo: "O porquê do resultado",
+      corpo: "A leitura em uma frase: por que o evento é <b>acionar</b>, <b>ambíguo</b> ou <b>descartar</b>, e por que está <b>pendente</b> (esperando o operador). A decisão do nó é determinística e versionada." },
+    { tela: "revisao", abrir: true, alvo: ".regras", titulo: "As regras, uma a uma",
+      corpo: "A decisão não é caixa-preta: são regras explícitas, cada uma com o que se esperava e o que se mediu. É o que transforma \"o sistema decidiu\" em \"decidiu por estas razões\"." },
+    { tela: "revisao", abrir: true, alvo: ".decisao", titulo: "A validação humana",
+      corpo: "Confirmar ou rejeitar, com observação registrada em nome do operador. Só o que for confirmado entra na priorização — e a decisão nunca se apaga, corrige-se por cima." },
+    { tela: "auditoria", alvo: ".grade-cartoes", titulo: "À prova de adulteração", admin: true,
+      corpo: "Cada passo — recebimento, acesso à evidência, decisão — é encadeado por hash. Mexer no histórico quebra a cadeia, e o painel acusa na hora." },
+    { alvo: ".marca-lateral", titulo: "Pronto",
+      corpo: "Explore à vontade — os dados são de exemplo, de três cidades. Clique no <b>?</b> no canto para rever este guia quando quiser." },
+  ];
+
+  let idx = 0, hi = null, card = null, ativo = false;
+
+  function esperar(sel, tentativas) {
+    return new Promise((resolve) => {
+      let n = tentativas || 40;
+      (function tenta() {
+        const el = document.querySelector(sel);
+        if (el) return resolve(el);
+        if (--n <= 0) return resolve(null);
+        setTimeout(tenta, 50);
+      })();
+    });
+  }
+
+  async function prepararTela(passo) {
+    if (passo.tela && typeof irPara === "function") {
+      irPara(passo.tela);
+      await esperar(".conteudo .topo-tela", 40);
+    }
+    if (passo.abrir) {
+      const item = document.querySelector(".lista-eventos .item");
+      if (item && typeof abrirEvento === "function") {
+        abrirEvento(Number(item.dataset.id));
+        await esperar("#detalhe .grade-medidas", 60);
+      }
+    }
+  }
+
+  function limpar() {
+    hi && hi.remove(); card && card.remove(); hi = null; card = null;
+  }
+
+  async function mostrar(i, dir) {
+    dir = dir || 1;
+    if (i < 0 || i >= passos.length) return finalizar();
+    const passo = passos[i];
+    // pula o passo de admin quando o acesso é de operador (sem a aba Auditoria);
+    // a presença da aba no menu é o sinal de RBAC, sem depender de estado interno.
+    if (passo.admin && !document.querySelector('[data-tela="auditoria"]')) {
+      return mostrar(i + dir, dir);
+    }
+    idx = i;
+    await prepararTela(passo);
+    let alvo = await esperar(passo.alvo, 40);
+    if (!alvo) alvo = document.querySelector(".marca-lateral");
+    alvo.scrollIntoView({ block: "center", behavior: "instant" });
+    await new Promise((r) => setTimeout(r, 160));
+    posicionar(alvo, i);
+  }
+
+  function posicionar(alvo, i) {
+    limpar();
+    const r = alvo.getBoundingClientRect();
+    const pad = 6;
+    hi = document.createElement("div");
+    hi.className = "tour-hi";
+    hi.style.left = Math.max(4, r.left - pad) + "px";
+    hi.style.top = Math.max(4, r.top - pad) + "px";
+    hi.style.width = Math.min(window.innerWidth - 8, r.width + pad * 2) + "px";
+    hi.style.height = (r.height + pad * 2) + "px";
+    document.body.appendChild(hi);
+
+    const passo = passos[i];
+    card = document.createElement("div");
+    card.className = "tour-card";
+    card.innerHTML =
+      `<div class="passo-n">${i + 1} de ${passos.length}</div>
+       <h4>${passo.titulo}</h4><p>${passo.corpo}</p>
+       <div class="tour-botoes">
+         <button class="tour-pular">Pular</button><span class="espaco"></span>
+         ${i > 0 ? '<button class="tour-ant">Anterior</button>' : ""}
+         <button class="tour-prox">${i === passos.length - 1 ? "Concluir" : "Próximo"}</button>
+       </div>`;
+    document.body.appendChild(card);
+
+    // posiciona o cartão: abaixo do alvo se couber, senão acima; preso à tela.
+    const cr = card.getBoundingClientRect();
+    let top = r.bottom + 12;
+    if (top + cr.height > window.innerHeight - 12) top = r.top - cr.height - 12;
+    if (top < 12) top = 12;
+    let left = r.left;
+    if (left + cr.width > window.innerWidth - 12) left = window.innerWidth - cr.width - 12;
+    if (left < 12) left = 12;
+    card.style.top = top + "px";
+    card.style.left = left + "px";
+
+    card.querySelector(".tour-prox").onclick = () => mostrar(i + 1, 1);
+    const ant = card.querySelector(".tour-ant");
+    if (ant) ant.onclick = () => mostrar(i - 1, -1);
+    card.querySelector(".tour-pular").onclick = finalizar;
+  }
+
+  function finalizar() {
+    limpar();
+    ativo = false;
+    try { localStorage.setItem(CHAVE, "1"); } catch (e) {}
+  }
+
+  function iniciar() {
+    if (ativo) return;
+    ativo = true;
+    mostrar(0);
+  }
+
+  function montarBotao() {
+    if ($("tour-ajuda")) return;
+    const b = document.createElement("button");
+    b.id = "tour-ajuda";
+    b.className = "tour-ajuda";
+    b.title = "Rever o guia";
+    b.textContent = "?";
+    b.onclick = iniciar;
+    document.body.appendChild(b);
+  }
+
+  window.addEventListener("resize", () => { if (ativo) posicionar(document.querySelector(passos[idx].alvo) || document.querySelector(".marca-lateral"), idx); });
+
+  window.__ecoarTour = {
+    aoEntrar() {
+      montarBotao();
+      let visto = false;
+      try { visto = !!localStorage.getItem(CHAVE); } catch (e) {}
+      if (!visto) iniciar();
+    },
+    iniciar,
+  };
+})();
+'''
+
+FAIXA_DEMO_FIM = ""  # marcador
+
 
 def transformar_painel() -> str:
     js = (RAIZ / "dashboard" / "painel.js").read_text(encoding="utf-8")
@@ -280,7 +478,7 @@ def corpo_do_painel() -> str:
 
 
 def montar(standalone: bool) -> str:
-    css = (RAIZ / "dashboard" / "estilo.css").read_text(encoding="utf-8") + CSS_DEMO_EXTRA
+    css = (RAIZ / "dashboard" / "estilo.css").read_text(encoding="utf-8") + CSS_DEMO_EXTRA + TOUR_CSS
     dados = (RAIZ / "demo" / "dados-demo.js").read_text(encoding="utf-8")
     # `</` dentro do JSON quebraria o <script>. Escapar mantém o valor idêntico em JS.
     dados = dados.replace("</", "<\\/")
@@ -293,6 +491,7 @@ def montar(standalone: bool) -> str:
         corpo,
         f"<script>{dados}</script>",
         f"<script>{painel}</script>",
+        f"<script>{TOUR_JS}</script>",
     ]
     conteudo = "\n".join(partes)
 

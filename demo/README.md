@@ -22,10 +22,25 @@ Isso é garantido por construção: `scripts/montar_demo.py` recorta os trechos 
 rede do `dashboard/painel.js` e, se o painel mudar a ponto de o recorte não
 casar, o build falha alto em vez de gerar tela quebrada.
 
+## Tour guiado (primeiro acesso)
+
+Ao entrar pela primeira vez, um **guia passo a passo** destaca cada tela e
+explica o porquê de cada coisa — é o "modo TV de loja", que roda sozinho e ajuda
+o apresentador. São dez passos (priorização → revisão → o porquê da decisão →
+validação humana → auditoria). Fica gravado no navegador: só aparece no primeiro
+acesso. O botão **?** no canto inferior esquerdo reabre o guia quando quiser.
+
+O tour é exclusivo da demo (injetado no build, como a faixa "demonstração") — não
+faz parte do dashboard real.
+
 ## O que ela mostra
 
 - **Login** igual ao da B (qualquer token entra; um token com "operador" entra
   sem as telas de admin).
+- **O porquê de cada evento** — cada evento traz um painel "Por que este
+  resultado": o motivo determinístico do nó (por que **acionar**, **ambíguo** ou
+  **descartar**) e o que o status significa (por que **pendente**, **confirmado**
+  ou **rejeitado**). É a leitura em uma frase, para o apresentador e o operador.
 - **Priorização** — mapa de calor hora × dia da semana + ranking de pontos das
   três cidades, sobre eventos confirmados.
 - **Fila de revisão** — evento com **áudio real** (embutido do pacote), imagens

@@ -313,6 +313,12 @@ function desenharDetalhe(evento) {
       ${medida("Nível estimado", evento.spl_db == null ? "—" : `${numero(evento.spl_db, 1)} dB`, "sem valor legal — array MEMS", true)}
       ${medida("Decisão do nó", evento.acao, evento.versao_politica)}
     </div>
+    <div class="porque">
+      <h3>Por que este resultado</h3>
+      ${decisao.motivo ? `<p class="porque-motivo">${texto(decisao.motivo)}</p>` : ""}
+      <p class="porque-status"><span class="etiqueta ${evento.status}">${rotuloStatus(evento.status)}</span>
+        ${explicacaoStatus(evento.status)}</p>
+    </div>
     <div class="bloco"><h3>Áudio do evento</h3>
       <audio controls preload="none" data-src="/v1/eventos/${evento.id}/audio-audicao.wav"></audio>
       <p class="aviso-audio">Mono 16 bits, só para audição. A evidência é o áudio de 4 canais dentro do pacote.</p></div>
@@ -597,6 +603,16 @@ function quando(iso) {
 function rotuloStatus(s) {
   return { pendente_revisao: "pendente", confirmado: "confirmado",
     confirmado_multa: "confirmado (multa)", rejeitado: "rejeitado" }[s] || s;
+}
+/* O "porquê" do status, em uma frase — o que o nó decide é determinístico, mas
+   o status é sempre resultado de (ou espera por) decisão humana (D2). */
+function explicacaoStatus(s) {
+  return {
+    pendente_revisao: "aguarda validação humana: nenhum evento vira estatística de priorização sem um operador confirmar.",
+    confirmado: "um operador confirmou a ocorrência — só agora ela conta na priorização.",
+    confirmado_multa: "confirmado por operador em modo de autuação, com instrumento certificado.",
+    rejeitado: "um operador revisou e descartou — não entra na priorização, mas fica registrado.",
+  }[s] || "";
 }
 /* Escapa tudo que vem da API antes de entrar no HTML: campos passam pelo nó e
    por observação de operador, e nenhum dos dois é lugar de confiar cegamente. */

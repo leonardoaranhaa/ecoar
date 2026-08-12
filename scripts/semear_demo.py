@@ -169,13 +169,25 @@ def _predicao(score: float) -> Predicao:
     resto = (1.0 - score) / (len(CLASSES) - 1)
     scores = {c: resto for c in CLASSES}
     scores[CLASSE_ALVO] = score
+    # A explicação acompanha a força do sinal: um score alto tem série harmônica
+    # e estalos claros; um score médio é o caso que o operador precisa julgar.
+    # O "porquê" varia por evento em vez de repetir a mesma frase.
+    if score >= 0.88:
+        explicacao = ("fundamental grave de motor (~88 Hz), série harmônica forte "
+                      "e estalos de escape repetidos — assinatura típica de escapamento aberto")
+    elif score >= 0.80:
+        explicacao = ("harmônicos de motor presentes e nível acima do piso, mas com "
+                      "ruído de fundo — dentro do limiar de acionamento")
+    else:
+        explicacao = ("traços de escapamento presentes, porém série harmônica fraca e "
+                      "intermitente — compatível com revisão, abaixo do limiar de acionamento")
     return Predicao(
         classe=CLASSE_ALVO if score >= 0.5 else "ambiente",
         score=max(scores.values()),
         scores=scores,
         modelo="heuristico",
         versao_modelo="heuristico/1.0-bancada",
-        explicacao="fundamental de motor, série harmônica forte",
+        explicacao=explicacao,
         descritores={"f0_hz": 88.0},
     )
 
