@@ -15,7 +15,8 @@ Previstos ao longo da construção:
 
 ## `semear_demo.py` — a demo da reunião de produto (Opção B)
 
-Semeia o backend **real** com dado de três cidades (Bauru, Piracicaba, Marília),
+Semeia o backend **real** com o cenário de Piracicaba (cinco pontos do
+levantamento em `docs/field-notes/piracicaba.md`),
 para mostrar o sistema rodando de verdade numa reunião — não um mock de tela.
 
 Cada evento é um pacote `.ecoar` montado pelo mesmo código do nó, enviado pela

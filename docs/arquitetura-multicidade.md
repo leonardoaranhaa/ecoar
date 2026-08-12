@@ -331,15 +331,15 @@ que é (demonstração, não sistema em produção).
 
 ### O que mostrar (a narrativa de 5 minutos)
 
-1. **Seletor de cidade** — Bauru, Piracicaba, Marília. Prova o multi-cidade num
-   clique. (Decisão 3.)
-2. **Mapa da cidade** com um pino por equipamento, cor pelo estado. É a tela mais
-   visual e a que "vende" — mostra cobertura e onde estão os postes.
-3. **Priorização** — o mapa de calor hora×dia que já existe, com dado realista.
+1. **Os pontos escolhidos** — a coluna "Local" nomeia por que cada ponto entrou:
+   operação da Semuttran na Av. Presidente Kennedy, requerimentos da Câmara,
+   polo de lazer da Rua do Porto. Abre a conversa mostrando que houve
+   levantamento, não chute. (Ver `docs/field-notes/piracicaba.md`.)
+2. **Priorização** — o mapa de calor hora×dia que já existe, com dado realista.
    É o argumento central: "onde e quando mandar a blitz".
-4. **Fila de revisão** — abrir um evento, ouvir o áudio, ver as regras que o nó
+3. **Fila de revisão** — abrir um evento, ouvir o áudio, ver as regras que o nó
    avaliou, confirmar. Mostra a validação humana e a evidência auditável.
-5. **Uma frase de honestidade** em cada tela sensível: SPL sem valor legal, não
+4. **Uma frase de honestidade** em cada tela sensível: SPL sem valor legal, não
    gera multa, dado de campo ainda não coletado. É o que dá credibilidade
    técnica na primeira pergunta de um engenheiro da prefeitura.
 
@@ -353,8 +353,8 @@ reunião e abrir no telão ou no celular. Risco zero de travar. Limite honesto: 
 um mockup navegável com dado de exemplo, e é rotulado como tal.
 
 **Opção B — o sistema real rodando, com dado semeado.** ✅ **construída.**
-É o backend + painel que já construímos (etapa 11), com 3 cidades (Bauru,
-Piracicaba, Marília — oito nós) e eventos semeados, rodando no notebook do
+É o backend + painel que já construímos (etapa 11), semeado com o cenário de
+Piracicaba (cinco pontos), rodando no notebook do
 apresentador ou num VPS. Mais convincente para plateia técnica (é o sistema de
 verdade, não desenho), mas exige subir algo e tem risco de demo ao vivo.
 

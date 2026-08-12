@@ -2,7 +2,7 @@
 
 A Opção A é a mesma tela da B (dashboard/), mas sem servidor: para apresentar
 sem subir nada. Em vez de reescrever um mock à mão — que foi de onde vieram os
-bugs visuais —, este script sobe o backend real, semeia as três cidades e
+bugs visuais —, este script sobe o backend real, semeia o cenário de Piracicaba e
 captura a RESPOSTA REAL de cada endpoint. O painel da demo lê esse retrato no
 lugar da rede. Fiel por construção: é o mesmo dado que a B serve.
 

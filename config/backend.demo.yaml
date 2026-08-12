@@ -1,8 +1,9 @@
-# Configuração de DEMONSTRAÇÃO do backend — três cidades no mesmo backend.
+# Configuração de DEMONSTRAÇÃO do backend — cenário de Piracicaba.
 #
-# É a Opção B da reunião de produto: o sistema REAL rodando, semeado com dado
-# realista de Bauru, Piracicaba e Marília. Um backend, muitas instalações — a
-# fundação do multi-tenant. O isolamento por município (login por cidade) é a
+# É a Opção B da reunião de produto: o sistema REAL rodando, semeado com o
+# cenário de Piracicaba (cinco pontos do levantamento em
+# docs/field-notes/piracicaba.md). O mesmo backend atende várias instalações — a
+# fundação do multi-tenant; o isolamento por município (login por cidade) é a
 # fase seguinte, planejada em docs/arquitetura-multicidade.md.
 #
 # ATENÇÃO: os tokens abaixo trazem PADRÃO embutido (${VAR:-padrao}) só para a
@@ -15,17 +16,14 @@ banco: "dados/demo/ecoar.db"
 armazenamento: "dados/demo/pacotes"
 tamanho_maximo_pacote_mb: 64
 
-# Oito nós, três cidades. O token autentica o nó; o backend confere que o
+# Cinco nós em Piracicaba. O token autentica o nó; o backend confere que o
 # manifesto declara o mesmo nó — um nó não envia evento em nome de outro.
 tokens:
-  bauru-ponte-sao-joao-01: "${ECOAR_TOKEN_BAURU_01:-demo-bauru-ponte-sao-joao-0001}"
-  bauru-batalha-centro-02: "${ECOAR_TOKEN_BAURU_02:-demo-bauru-batalha-centro-0002}"
-  bauru-jardim-europa-03: "${ECOAR_TOKEN_BAURU_03:-demo-bauru-jardim-europa-0003}"
-  piracicaba-beira-rio-01: "${ECOAR_TOKEN_PIRA_01:-demo-piracicaba-beira-rio-0004}"
-  piracicaba-av-independencia-02: "${ECOAR_TOKEN_PIRA_02:-demo-piracicaba-independencia-0005}"
-  piracicaba-vila-rezende-03: "${ECOAR_TOKEN_PIRA_03:-demo-piracicaba-vila-rezende-0006}"
-  marilia-sampaio-vidal-01: "${ECOAR_TOKEN_MARILIA_01:-demo-marilia-sampaio-vidal-0007}"
-  marilia-esplanada-02: "${ECOAR_TOKEN_MARILIA_02:-demo-marilia-esplanada-0008}"
+  piracicaba-kennedy-01: "${ECOAR_TOKEN_NO_01:-demo-piracicaba-kennedy-000001}"
+  piracicaba-centro-hospitalar-02: "${ECOAR_TOKEN_NO_02:-demo-piracicaba-hospitalar-0002}"
+  piracicaba-joao-conceicao-03: "${ECOAR_TOKEN_NO_03:-demo-piracicaba-conceicao-0003}"
+  piracicaba-sao-dimas-04: "${ECOAR_TOKEN_NO_04:-demo-piracicaba-saodimas-00004}"
+  piracicaba-rua-do-porto-05: "${ECOAR_TOKEN_NO_05:-demo-piracicaba-ruadoporto-005}"
 
 # Operadores do painel. Nome começando com "admin" recebe o perfil admin
 # (vê as telas de Modelo e Auditoria).
