@@ -256,14 +256,45 @@ html, body { height: auto; }
     border-left: none; border-bottom: 3px solid transparent; border-radius: 6px;
   }
   .item-nav.ativo { border-left-color: transparent; border-bottom-color: var(--laranja); }
+  .conteudo { padding: 18px 14px; }
+  .topo-tela h1 { font-size: 19px; }
+
+  /* Mapa de calor: sem `width:100%` + `table-layout:fixed` a tabela usava só o
+     que o conteúdo pedia (~220px) e sobrava metade da tela vazia. Com layout
+     fixo, só a largura da 1ª linha (os <th>) importa — a coluna da hora fica
+     estreita, o resto do espaço se reparte igual entre os 7 dias. */
+  .heatmap { width: 100%; table-layout: fixed; font-size: 10px; }
+  .heatmap th:first-child, .heatmap td.hora { width: 30px; }
+
+  /* Toda tabela de dados: um nó/hash/id sem espaço (ex.: `sha256:19b6…`,
+     `piracicaba-centro-hospitalar-02`) não tem onde quebrar linha por padrão, e
+     isso empurrava a PÁGINA INTEIRA para o lado — era a causa do "vazando".
+     `overflow-wrap:anywhere` dá à célula onde quebrar; a tabela continua com
+     `table-layout:auto` (proporcional ao conteúdo, como no desktop) — testado
+     `table-layout:fixed` aqui e ficou pior: colunas curtas (ESTADO, BATERIA)
+     ganhavam a mesma largura da coluna de texto longo (LOCAL), quebrando
+     palavra por letra. Auto deixa a coluna curta ficar curta. */
+  .tabela { width: 100%; }
+  .tabela td, .tabela th {
+    padding: 8px 6px; font-size: 12.5px;
+    overflow-wrap: anywhere; word-break: break-word;
+  }
+
+  /* -- fila de revisão: lista OU detalhe, nunca as duas empilhadas --
+     Empilhado (lista longa, depois o detalhe embaixo) obrigava a rolar a
+     página inteira para ver o que acabou de ser clicado — confuso numa
+     apresentação, onde quem está vendo espera a resposta na hora. Aqui a
+     lista some quando um evento é aberto, e um botão "Voltar" retorna a ela;
+     o script (ver .voltar-fila abaixo) cuida de trocar a classe e rolar ao
+     topo. */
   .revisao { grid-template-columns: 1fr; }
   .coluna-fila { border-right: none; padding-right: 0; }
-  .conteudo { padding: 18px 14px; }
-  /* O que é largo por natureza rola dentro do bloco, sem empurrar a página. */
+  .revisao.detalhe-aberto .coluna-fila { display: none; }
+  .revisao:not(.detalhe-aberto) #detalhe { display: none; }
+  .voltar-fila { margin-bottom: 16px; }
+
+  /* O que ainda assim for largo por natureza rola dentro do próprio bloco. */
   .bloco, .grade-medidas, .filtros { overflow-x: auto; }
-  .heatmap td { width: 26px; }
-  .tabela td, .tabela th { padding: 8px 6px; font-size: 12.5px; }
-  .topo-tela h1 { font-size: 19px; }
 }
 
 /* -- demonstração: faixa e sobreposição do relatório --------------- */
@@ -502,6 +533,69 @@ TOUR_JS = r'''
 
 FAIXA_DEMO_FIM = ""  # marcador
 
+# ---------------------------------------------------------------------------
+# Fila de revisão no celular — lista OU detalhe, nunca as duas empilhadas.
+#
+# Na tela larga a fila e o detalhe ficam lado a lado (.revisao é grid de duas
+# colunas); no celular a regra em CSS_DEMO_EXTRA empilha as duas embaixo uma
+# da outra — o que force rolar a lista inteira para ver o que acabou de ser
+# clicado. Numa apresentação isso é falha visível: quem está assistindo espera
+# a resposta na hora do clique. Este script troca embaixo por alternância: a
+# lista some quando um evento abre, mostra o detalhe do topo, e um botão
+# "Voltar" restaura a lista. Só na demo — o dashboard real não empilha porque
+# tem a viewport larga do desktop.
+# ---------------------------------------------------------------------------
+MESTRE_DETALHE_JS = r'''
+(function () {
+  "use strict";
+
+  function ehMobile() {
+    return window.matchMedia("(max-width: 860px)").matches;
+  }
+
+  const PLACEHOLDER =
+    '<div class="placeholder"><p>Selecione um evento na fila.</p>' +
+    '<p class="dica">Nenhum evento é contado sozinho: a priorização se ' +
+    "alimenta do que você confirmar aqui.</p></div>";
+
+  function aplicar() {
+    const revisao = document.querySelector(".revisao");
+    const detalhe = document.getElementById("detalhe");
+    if (!revisao || !detalhe) return;
+
+    if (!ehMobile()) {
+      revisao.classList.remove("detalhe-aberto");
+      return;
+    }
+
+    const temSelecao = !!detalhe.querySelector(".topo-tela");
+
+    if (temSelecao && !detalhe.querySelector(".voltar-fila")) {
+      const botao = document.createElement("button");
+      botao.type = "button";
+      botao.className = "secundario voltar-fila";
+      botao.textContent = "← Voltar à fila";
+      botao.addEventListener("click", () => {
+        detalhe.innerHTML = PLACEHOLDER;
+        revisao.classList.remove("detalhe-aberto");
+        if (typeof estado !== "undefined") estado.selecionado = null;
+        if (typeof desenharListaRevisao === "function") desenharListaRevisao();
+        window.scrollTo({ top: 0, behavior: "instant" });
+      });
+      detalhe.prepend(botao);
+    }
+
+    revisao.classList.toggle("detalhe-aberto", temSelecao);
+    if (temSelecao) window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  const observador = new MutationObserver(aplicar);
+  const alvo = document.getElementById("conteudo") || document.body;
+  observador.observe(alvo, { childList: true, subtree: true });
+  window.addEventListener("resize", aplicar);
+})();
+'''
+
 
 def transformar_painel() -> str:
     js = (RAIZ / "dashboard" / "painel.js").read_text(encoding="utf-8")
@@ -550,6 +644,7 @@ def montar(standalone: bool) -> str:
         f"<script>{dados}</script>",
         f"<script>{painel}</script>",
         f"<script>{TOUR_JS}</script>",
+        f"<script>{MESTRE_DETALHE_JS}</script>",
     ]
     conteudo = "\n".join(partes)
 
