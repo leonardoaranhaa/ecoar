@@ -34,7 +34,8 @@ sem passar por um operador. O status inicial de todo evento ingerido é
 
 ## D3 — Array MEMS ≠ medição legal
 
-O array de 4 microfones ICS-43434 serve para **localização direcional** e
+O array de 4 microfones SPH0645LM4H (substituto direto do ICS-43434, descontinuado
+em 2026 — mesmo pinout) serve para **localização direcional** e
 **classificação de assinatura acústica**. O SPL calculado a partir dele é
 estimativa relativa, calibrada por campanha, marcada em todo lugar como
 `valor_legal: false`.

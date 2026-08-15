@@ -51,11 +51,11 @@ O sistema detecta veículos (principalmente motocicletas) com nível sonoro acim
 │                       NÓ DE BORDA (por poste)                  │
 │  ┌─────────────────────────────────────────────┐               │
 │  │  Array de 4-6 microfones MEMS (círculo)      │               │
-│  │  ICS-43434 (I2S, resposta plana, baixo ruído)│               │
+│  │  SPH0645LM4H (I2S, resposta plana, baixo ruído)│              │
 │  └──────────────────┬────────────────────────────┘             │
 │                      ▼                                          │
 │  ┌─────────────────────────────────────────────┐               │
-│  │  Raspberry Pi CM4 / Jetson Orin Nano         │               │
+│  │  Raspberry Pi CM5 (ou CM4) / Jetson Orin Nano│               │
 │  │  - Medição de SPL (nível de pressão sonora)  │               │
 │  │  - Localização direcional (GCC-PHAT)         │               │
 │  │  - Classificador de assinatura acústica (ML) │               │
@@ -88,11 +88,13 @@ O sistema detecta veículos (principalmente motocicletas) com nível sonoro acim
 
 ---
 
-## 3. POR QUE ESSE HARDWARE (e não o do projeto Sentinel)
+## 3. POR QUE ESSE HARDWARE (nível de processamento necessário)
 
-O projeto Sentinel (bueiros) usava ESP32 porque as tarefas eram simples: ler sensor, comparar com limiar, transmitir. Aqui é diferente — **localizar direção do som com múltiplos microfones e classificar padrão acústico em tempo real exige poder de processamento que o ESP32 não tem.** Por isso o núcleo de borda muda para Raspberry Pi CM4 (mais barato, ~R$450) ou Jetson Orin Nano (mais caro, ~R$1.800, mas roda o classificador de ML localmente com folga).
+Um microcontrolador simples (linha ESP32) não é suficiente aqui — **localizar a direção do som com múltiplos microfones e classificar o padrão acústico em tempo real exige poder de processamento que esse tipo de chip não tem.** Por isso o núcleo de borda é um computador de placa única: Raspberry Pi CM5/CM4 (mais barato, ~R$450-550) ou Jetson Orin Nano (mais caro, ~R$1.800, mas roda o classificador de ML localmente com folga).
 
-**Recomendação para o MVP em Bauru: Raspberry Pi CM4.** Suficiente para o algoritmo de localização direcional e um classificador de áudio leve (rede neural pequena, tipo MobileNet adaptada para espectrograma). Jetson só se o classificador de imagem (ANPR) também rodar localmente em vez de na nuvem.
+**Recomendação para o MVP: Raspberry Pi CM5, com CM4 como alternativa equivalente.** A CM5 (lançada em nov/2024) é hoje a recomendação padrão para projeto novo — mesmo formato físico da CM4, processador mais rápido, preço na mesma faixa. A CM4 continua em produção garantida e é intercambiável na maioria dos casos, então qualquer uma resolve o MVP. Ambas são suficientes para o algoritmo de localização direcional e um classificador de áudio leve (rede neural pequena, tipo MobileNet adaptada para espectrograma). Jetson só se o classificador de imagem (ANPR) também rodar localmente em vez de na nuvem.
+
+**Nota de manutenção da lista de componentes:** componentes eletrônicos têm ciclo de vida curto (12-18 meses até serem descontinuados). Antes de qualquer compra em volume, reconfirme disponibilidade dos itens da seção 11 — um item já foi descontinuado desde a primeira versão deste manual (ver nota na lista de materiais).
 
 ---
 
@@ -363,7 +365,7 @@ A parte que faz o sistema ser usável no dia a dia, não só tecnicamente funcio
 
 ## 9.6 IDENTIDADE DO PRODUTO
 
-**Nome: ECOA**
+**Nome: ECOAR**
 
 Vem de "ecoar" — o som que volta, que se confirma. Encaixa com o núcleo do produto: o sistema não apenas ouve, ele confirma o que ouviu antes de agir. É curto, fácil de falar numa reunião com prefeitura, e não soa agressivo ou punitivo (evita nomes tipo "Radar", "Multa Já", que reforçam a imagem de fiscalização hostil).
 
@@ -379,7 +381,7 @@ Tagline sugerida: **"Ouve. Confirma. Prova."** — resume o pipeline inteiro (ca
 
 **Paleta**
 
-Sugestão de manter consistência com a identidade já existente de Studio Cerne (estética editorial escura, laranja #FF6B35 como cor de assinatura), com adição de duas cores funcionais específicas do ECOA:
+Sugestão de manter consistência com a identidade já existente de Studio Cerne (estética editorial escura, laranja #FF6B35 como cor de assinatura), com adição de duas cores funcionais específicas do ECOAR:
 
 - **Base**: escuro editorial (mesma linha do Studio Cerne) — transmite seriedade institucional
 - **Âmbar de alerta** (`#F5A623` ou similar): estados de "evento pendente de revisão" — evita vermelho puro, que soa como culpa já definida antes da validação humana
@@ -504,10 +506,10 @@ de engenharia:
 
 | Item | Modelo | Preço estimado (R$) |
 |---|---|---|
-| Computador de borda | Raspberry Pi CM4 (4GB) + placa base | 450 |
-| Microfones MEMS (4x) | ICS-43434 (I2S) | 120 |
+| Computador de borda | Raspberry Pi CM5 (4GB) + placa base — CM4 é alternativa equivalente | 450-550 |
+| Microfones MEMS (4x) | SPH0645LM4H (I2S) — substituto direto confirmado do ICS-43434, descontinuado em 2026 | 120 |
 | Câmera ANPR | Módulo com IR para leitura noturna de placa | 350 |
-| Módulo 4G/LTE | Quectel EC25 | 180 |
+| Módulo 4G/LTE | Quectel EC25 — CONFIRMAR ESTOQUE antes de comprar (série com sinal de EOL em alguns distribuidores); EC200A-EU ou EG25-G são alternativas compatíveis | 180 |
 | Case IP65 + suporte de poste | Fabricação sob medida | 150 |
 | Fonte/bateria backup | Fonte 12V + bateria de gel 7Ah | 130 |
 | **Subtotal por nó** | | **~R$ 1.380** |
@@ -524,6 +526,8 @@ de engenharia:
 | Lacre numerado | Evidenciador de abertura | 10 |
 | **Subtotal proteção** | | **~R$ 185** |
 | **TOTAL POR NÓ (modo=triagem)** | | **~R$ 1.565** |
+
+**⚠️ Nota de disponibilidade (agosto/2026):** o ICS-43434 foi oficialmente descontinuado pelo fabricante (TDK InvenSense) — a lista acima já reflete o substituto direto confirmado (SPH0645LM4H, mesmo pinout). O módulo Quectel EC25 tem sinal misto de disponibilidade entre distribuidores — confirme estoque atual antes de fechar compra, e tenha EC200A-EU/EG25-G como plano B. Recomenda-se revisar esta lista a cada nova rodada de compra, não assumir que ela continua atual indefinidamente.
 
 ### Instrumento de medição certificado (apenas em `modo=autuacao`)
 
@@ -545,7 +549,68 @@ Mais caro que o Sentinel (bueiro) porque exige mais poder de processamento — m
 
 ---
 
-## 12. PRÓXIMO PASSO TÉCNICO IMEDIATO
+## 12. ROADMAP MODULAR — ALÉM DO RUÍDO DE ESCAPAMENTO
+
+O hardware do ECOAR (array de microfones + câmera + computador de borda +
+conectividade) não é dedicado a um único problema. É uma plataforma de
+sensoriamento urbano que hoje está *configurada* para escapamento adulterado,
+porque foi essa a demanda que originou o projeto. Outros módulos são
+reconfiguração de software sobre o mesmo equipamento, não produto novo.
+
+Esta seção existe para uso comercial: ter clareza do que é seguro oferecer
+como complemento imediato numa reunião, e o que é apenas direção futura — para
+não prometer mais do que está pronto para sustentar.
+
+### 12.1 Nível 1 — Pronto para mencionar como complemento na reunião
+
+Reaproveitam hardware já especificado no nó (câmera ou array de microfones),
+sem sensor adicional, sem nova base legal complexa, e falam diretamente com
+quem normalmente está na sala (Secretaria de Mobilidade/Trânsito):
+
+| Módulo | Como funciona | Reaproveita |
+|---|---|---|
+| **Contagem e classificação de tráfego** | A câmera ANPR já instalada classifica veículos por tipo (moto/carro/ônibus) e gera volume por horário e local | Câmera (mesma usada para escapamento) |
+| **Detecção de obra fora de horário permitido** | O classificador de assinatura acústica é retreinado para reconhecer britadeira/marreta, aplicando a mesma Lei do Silêncio | Array de microfones + classificador |
+
+**Como apresentar:** mencionar como parte natural do mesmo sistema, não como
+proposta separada — "o mesmo sensor que capta escapamento também gera esse
+dado, sem custo adicional".
+
+### 12.2 Nível 2 — Direção futura, mencionar com cautela
+
+Tecnicamente viável com o mesmo hardware, mas envolve outra secretaria,
+integração com base de dados externa, ou tema sensível o suficiente para não
+ser o foco de uma primeira reunião comercial:
+
+| Módulo | Como funciona | Observação |
+|---|---|---|
+| **Detecção de disparo de arma de fogo** | Array de microfones + triangulação + classificador de assinatura acústica localizam e classificam disparo em segundos | Precedente real: Niterói opera o ShotSpotter (SoundThinking) com exatamente essa arquitetura, integrado ao Centro Integrado de Segurança Pública. Relevante para Segurança Pública/Guarda Municipal, não para Mobilidade — assunto de outra conversa, outro comprador |
+| **Cruzamento de placa com veículos furtados/roubados** | A câmera ANPR já lê placa; cruzaria com base de ocorrência policial | Exige acesso a base de dados de segurança pública e autorização formal — complexidade jurídica que não deve entrar numa reunião inicial |
+| **Detecção de acidente/colisão** | Reconhece padrão acústico de frenagem brusca + impacto | Módulo ainda não especificado tecnicamente; mencionar apenas como direção, não como capacidade |
+
+### 12.3 Nível 3 — Produto adjacente, não módulo do ECOAR
+
+Usam a mesma infraestrutura de poste (energia, conectividade, gabinete), mas
+exigem sensor físico adicional — é outro produto vendido em conjunto, não uma
+função nova do mesmo equipamento:
+
+| Módulo | Sensor adicional necessário | Observação |
+|---|---|---|
+| Monitoramento de iluminação pública | Sensor de luminosidade (baixo custo) | — |
+| Qualidade do ar | Sensor de PM2.5/gases (~R$150-300) | — |
+| Monitoramento de enchente/nível de água | Sensor ultrassônico | Já especificado no projeto Sentinel — mesma rede de postes pode compartilhar infraestrutura, mas é produto separado |
+
+### 12.4 Regra de uso comercial
+
+Nível 1 pode ser oferecido como parte da proposta atual. Nível 2 só deve ser
+mencionado se a conversa abrir espaço natural para isso (ex: pergunta direta
+sobre segurança pública) — nunca como pitch principal fora de contexto. Nível
+3 nunca deve ser tratado como parte do ECOAR — é cross-sell de outro produto,
+com sua própria proposta e ciclo de venda.
+
+---
+
+## 13. PRÓXIMO PASSO TÉCNICO IMEDIATO
 
 Antes de comprar qualquer hardware: gravar áudio de teste em campo (mesmo com celular) nos pontos citados nas notícias de Bauru, para validar se dá pra distinguir a assinatura de escapamento adulterado de outros ruídos urbanos com um modelo simples. Isso é barato, rápido, e responde a pergunta mais arriscada do projeto antes de qualquer investimento em hardware.
 

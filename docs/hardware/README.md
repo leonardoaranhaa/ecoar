@@ -5,10 +5,10 @@ Pinagem, montagem e checkpoints de integração entre o hardware e o código.
 ## Mapa de conexões do nó
 
 ```
-   4x microfone MEMS ICS-43434 ──(I2S)──┐
+   4x microfone MEMS SPH0645LM4H ──(I2S)┐
                                          │
    Instrumento de medição (NMT) ─(rede/serial)─┤
-                                         ├──► Raspberry Pi CM4 ──(USB)──► Modem 4G Quectel EC25
+                                         ├──► Raspberry Pi CM5/CM4 ──(USB)──► Modem 4G Quectel EC25
    Câmera ANPR ─────────────(USB/CSI)───┤        (caixa IP65)
                                          │
    MPU-6050 ────────────────(I2C)───────┤
@@ -18,7 +18,7 @@ Pinagem, montagem e checkpoints de integração entre o hardware e o código.
           Fonte 12V + bateria de backup 7Ah
 ```
 
-Tudo converge no CM4 — é o único ponto que conversa com todos os periféricos.
+Tudo converge no CM5/CM4 — é o único ponto que conversa com todos os periféricos.
 
 ## Ordem de integração (uma peça por vez)
 
