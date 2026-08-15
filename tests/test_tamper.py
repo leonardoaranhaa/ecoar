@@ -190,6 +190,41 @@ def test_manutencao_expira_sozinha():
     assert alertas, "expirada a manutenção, o alarme volta"
 
 
+def test_manutencao_expirada_com_tampa_ainda_aberta_dispara():
+    """Sem isso, uma tampa aberta durante a manutenção fica muda para sempre
+    depois que a manutenção expira — a borda foi consumida em silêncio."""
+    import time
+
+    detector, alertas, _ = _detector()
+    detector.entrar_manutencao(0.05)
+    detector._abertura.simular_abertura(True)
+    detector.verificar_uma_vez()
+    assert alertas == [], "em manutenção, a abertura não deve disparar"
+
+    time.sleep(0.1)
+    assert not detector.em_manutencao
+
+    disparados = detector.verificar_uma_vez()
+    assert any(a.tipo == ABERTURA for a in disparados), (
+        "manutenção expirou com a tampa ainda aberta — isso precisa soar"
+    )
+
+
+def test_manutencao_explicita_com_tampa_ainda_aberta_dispara():
+    """Mesma garantia quando a manutenção é encerrada por sair_manutencao()
+    (não só por o prazo estourar)."""
+    detector, alertas, _ = _detector()
+    detector.entrar_manutencao(60.0)
+    detector._abertura.simular_abertura(True)
+    detector.verificar_uma_vez()
+    assert alertas == []
+
+    detector.sair_manutencao()
+
+    disparados = detector.verificar_uma_vez()
+    assert any(a.tipo == ABERTURA for a in disparados)
+
+
 def test_manutencao_nao_passa_do_teto_configurado():
     detector, _, _ = _detector()
     fim = detector.entrar_manutencao(999999.0)

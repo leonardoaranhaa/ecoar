@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
@@ -139,7 +140,31 @@ def criar_rotas(
                     situacao=existente["status"],
                 )
 
-            instante = float(manifesto.get("instante_pico_epoch") or 0.0)
+            # `instante_pico_epoch` vira ano/mês/dia no caminho de guarda
+            # (armazenamento.caminho_de). Um valor absurdo — relógio de RTC
+            # corrompido no campo é a causa mais provável, não só um manifesto
+            # malicioso — faz datetime.fromtimestamp() estourar OverflowError/
+            # OSError, e isso não pode virar 500 sem registro: a garantia #3
+            # deste módulo é que toda rejeição fica registrada com o motivo.
+            try:
+                instante = float(manifesto.get("instante_pico_epoch") or 0.0)
+                datetime.fromtimestamp(instante, tz=timezone.utc)  # só valida o intervalo
+            except (TypeError, ValueError, OverflowError, OSError) as erro:
+                motivo = f"instante_pico_epoch inválido no manifesto: {erro}"
+                with db.transacao(conexao):
+                    db.registrar_rejeicao(conexao, no_id, evento_id, motivo)
+                    trilha.registrar(
+                        EVENTO_REJEITADO,
+                        ator=no_id,
+                        evento_id=evento_id,
+                        detalhe={"motivo": "instante_pico_epoch inválido"},
+                    )
+                log.warning("pacote recusado do nó %s: %s", no_id, motivo)
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={"erro": "pacote não íntegro", "problemas": [motivo]},
+                ) from erro
+
             destino = armazenamento.guardar(conteudo, no_id, evento_id, instante)
 
             decisao = manifesto.get("decisao") or {}
@@ -260,6 +285,4 @@ def _campos_do_manifesto(
 
 
 def _agora_iso() -> str:
-    from datetime import datetime, timezone
-
     return datetime.now(tz=timezone.utc).isoformat()

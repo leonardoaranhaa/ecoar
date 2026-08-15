@@ -1,6 +1,7 @@
 """Fila de envio: prioridade, persistência e confirmação antes de apagar."""
 
 import json
+import threading
 from pathlib import Path
 
 import httpx
@@ -54,6 +55,59 @@ def test_heartbeat_antigo_e_substituido(fila):
 
     assert fila.pendentes() == 1
     assert json.loads(fila.proximo().corpo)["bateria_pct"] == 70
+
+
+# -- concorrência --------------------------------------------------------
+
+
+def test_escritas_concorrentes_na_fila_nao_colidem(tmp_path):
+    """No nó de verdade, eventos, tamper, heartbeat e o remetente enfileiram
+    ou drenam a mesma fila ao mesmo tempo, o tempo todo — não é um caso raro.
+
+    Sem lock em volta da conexão, isso derrubava ~10% das operações
+    (`OperationalError`, `SystemError`, `lastrowid` vindo `None`) e podia
+    perder evidência sem nenhum aviso além de uma linha de log."""
+    fila = FilaEnvio(tmp_path / "fila.db", tentativas_maximas=99)
+    erros: list[Exception] = []
+
+    def enfileirar_eventos(n: int) -> None:
+        for i in range(n):
+            try:
+                fila.enfileirar_evento(f"/tmp/evt-{i}.ecoar")
+            except Exception as erro:  # noqa: BLE001 — captura para o teste falhar com detalhe
+                erros.append(erro)
+
+    def enfileirar_heartbeats(n: int) -> None:
+        for i in range(n):
+            try:
+                fila.enfileirar_heartbeat(json.dumps({"n": i}))
+            except Exception as erro:  # noqa: BLE001
+                erros.append(erro)
+
+    def drenar(n: int) -> None:
+        for _ in range(n):
+            try:
+                item = fila.proximo()
+                if item is None:
+                    continue
+                if item.id % 2 == 0:
+                    fila.confirmar(item.id)
+                else:
+                    fila.adiar(item.id, "erro simulado", agora=0.0)
+            except Exception as erro:  # noqa: BLE001
+                erros.append(erro)
+
+    threads = (
+        [threading.Thread(target=enfileirar_eventos, args=(150,)) for _ in range(3)]
+        + [threading.Thread(target=enfileirar_heartbeats, args=(150,)) for _ in range(2)]
+        + [threading.Thread(target=drenar, args=(250,)) for _ in range(3)]
+    )
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert erros == [], f"{len(erros)} operação(ões) concorrente(s) falharam: {erros[:3]}"
 
 
 # -- persistência e retentativa ----------------------------------------

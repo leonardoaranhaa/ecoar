@@ -79,6 +79,13 @@ def test_operador_atende_violacao(ambiente):
     assert pendentes["violacoes"] == []
 
 
+def test_atender_violacao_inexistente_e_recusado(ambiente):
+    """Sem checar, a rota confirmava 'atendido' mesmo para um id inventado."""
+    cliente, _ = ambiente
+    resposta = cliente.post("/v1/violacoes/999/atender", headers=como(TOKEN_OPERADOR))
+    assert resposta.status_code == 404
+
+
 def test_alerta_exige_token_de_no(ambiente):
     cliente, _ = ambiente
     assert cliente.post("/v1/alertas", json={"tipo": "impacto"}).status_code == 401

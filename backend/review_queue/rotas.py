@@ -216,6 +216,16 @@ def criar_rotas(
             bruto = armazenamento.ler_midia(linha["caminho_pacote"], "midia/audio.wav")
         except (MidiaNaoEncontrada, FileNotFoundError) as erro:
             raise HTTPException(status_code=404, detail=str(erro))
+
+        # Mesma garantia de cadeia de custódia que /midia/{nome}: isto lê o
+        # áudio original de dentro do pacote, só a saída é que é derivada.
+        with db.transacao(conexao):
+            trilha.registrar(
+                ACESSO_EVIDENCIA,
+                ator=identidade.nome,
+                evento_id=linha["evento_id"],
+                detalhe={"midia": "audio-audicao.wav"},
+            )
         return Response(content=_para_audicao(bruto), media_type="audio/wav")
 
     @rotas.get("/violacoes")
@@ -245,7 +255,11 @@ def criar_rotas(
     @rotas.post("/violacoes/{violacao_id}/atender")
     def atender(violacao_id: int, identidade: Identidade = Depends(operador_autenticado)):
         with db.transacao(conexao):
-            db.atender_violacao(conexao, violacao_id)
+            encontrada = db.atender_violacao(conexao, violacao_id)
+        if not encontrada:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="violação não encontrada"
+            )
         return {"status": "atendido", "id": violacao_id}
 
     @rotas.get("/nos")

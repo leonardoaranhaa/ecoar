@@ -280,6 +280,41 @@ def test_evento_ambiguo_gera_pacote_sem_imagem(tmp_path):
     assert verificar_pacote(caminho).valido
 
 
+# -- escrita atômica ----------------------------------------------------
+
+
+def test_falha_no_meio_da_montagem_nao_deixa_pacote_parcial(tmp_path):
+    """Cadeia de custódia (D8): ou o evento tem evidência completa, ou não tem
+    nenhuma — nunca um `.ecoar` incompleto no caminho final."""
+    config = de_dict(config_base())
+    evento = janela_evento()
+    acionador = AcionadorCamera(config, diretorio=tmp_path / "capturas")
+    with acionador:
+        acionamento = acionador.processar(
+            "evt-falha", predicao_alvo(), doa_boa(), evento.spl
+        )
+    assert acionamento.capturas, "o teste precisa de uma captura para poder sumir com ela"
+
+    # A imagem some do disco entre o acionamento e a montagem do pacote —
+    # sha256_arquivo() vai estourar FileNotFoundError no meio da montagem.
+    acionamento.capturas[0].caminho.unlink()
+
+    destino = tmp_path / "evt-falha.ecoar"
+    with pytest.raises(FileNotFoundError):
+        montar_pacote(
+            config=config,
+            evento_id="evt-falha",
+            evento=evento,
+            doa=doa_boa(),
+            predicao=predicao_alvo(),
+            acionamento=acionamento,
+            destino=destino,
+        )
+
+    assert not destino.exists()
+    assert not destino.with_name(destino.name + ".tmp").exists()
+
+
 # -- linha de comando --------------------------------------------------
 
 

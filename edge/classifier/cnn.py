@@ -70,9 +70,14 @@ def preparar_entrada(amostras: np.ndarray, taxa_amostragem: int) -> np.ndarray:
 
 
 def construir_modelo(n_classes: int = len(CLASSES), n_mels: int = N_MELS):
-    """CNN pequena o suficiente para o CM4, funda o suficiente para servir."""
-    torch = importar_torch()
-    from torch import nn
+    """CNN pequena o suficiente para o CM4, funda o suficiente para servir.
+
+    `n_mels` fica na assinatura por documentação de interface (é o formato que
+    `preparar_entrada` produz), mas a arquitetura não usa o valor: o
+    `AdaptiveAvgPool2d(1)` colapsa a dimensão espacial para 1×1 antes da camada
+    linear, então o mesmo modelo aceita qualquer n_mels/quadros sem mudar.
+    """
+    nn = importar_torch().nn
 
     def bloco(entrada: int, saida: int) -> "nn.Sequential":
         return nn.Sequential(
@@ -161,7 +166,10 @@ class ClassificadorCNN(Classificador):
             tensor = torch.from_numpy(entrada)[None, None, :, :]
             probabilidades = torch.softmax(self._modelo(tensor)[0], dim=0).numpy()
 
-        scores = {classe: float(p) for classe, p in zip(self._classes, probabilidades)}
+        scores = {
+            classe: float(p)
+            for classe, p in zip(self._classes, probabilidades, strict=True)
+        }
         vencedora = max(scores, key=scores.get)
         descritores = extrair_descritores(amostras, taxa_amostragem)
 
