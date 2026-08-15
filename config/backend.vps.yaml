@@ -1,4 +1,4 @@
-# Configuração de DEMONSTRAÇÃO em VPS — as mesmas três cidades da
+# Configuração de DEMONSTRAÇÃO em VPS — o mesmo cenário de Piracicaba da
 # backend.demo.yaml, mas endurecida para uma máquina exposta na internet.
 #
 # Diferença que importa: aqui NENHUM token tem padrão embutido. Se a variável
@@ -14,15 +14,11 @@ armazenamento: "dados/vps/pacotes"
 tamanho_maximo_pacote_mb: 64
 
 tokens:
-  bauru-ponte-sao-joao-01: "${ECOAR_TOKEN_BAURU_01}"
-  bauru-batalha-centro-02: "${ECOAR_TOKEN_BAURU_02}"
-  bauru-jardim-europa-03: "${ECOAR_TOKEN_BAURU_03}"
-  piracicaba-beira-rio-01: "${ECOAR_TOKEN_PIRA_01}"
-  piracicaba-av-independencia-02: "${ECOAR_TOKEN_PIRA_02}"
-  piracicaba-vila-rezende-03: "${ECOAR_TOKEN_PIRA_03}"
-  marilia-sampaio-vidal-01: "${ECOAR_TOKEN_MARILIA_01}"
-  marilia-esplanada-02: "${ECOAR_TOKEN_MARILIA_02}"
-
+  piracicaba-kennedy-01: "${ECOAR_TOKEN_NO_01}"
+  piracicaba-centro-hospitalar-02: "${ECOAR_TOKEN_NO_02}"
+  piracicaba-joao-conceicao-03: "${ECOAR_TOKEN_NO_03}"
+  piracicaba-sao-dimas-04: "${ECOAR_TOKEN_NO_04}"
+  piracicaba-rua-do-porto-05: "${ECOAR_TOKEN_NO_05}"
 tokens_operador:
   operador-transito: "${ECOAR_TOKEN_OPERADOR}"
   admin-studio-cerne: "${ECOAR_TOKEN_ADMIN}"

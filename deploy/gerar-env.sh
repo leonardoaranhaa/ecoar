@@ -27,15 +27,11 @@ cat > .env <<EOF
 # Para logar no painel, use ECOAR_TOKEN_OPERADOR (operador) ou
 # ECOAR_TOKEN_ADMIN (admin, vê Modelo e Auditoria).
 
-ECOAR_TOKEN_BAURU_01=$(token)
-ECOAR_TOKEN_BAURU_02=$(token)
-ECOAR_TOKEN_BAURU_03=$(token)
-ECOAR_TOKEN_PIRA_01=$(token)
-ECOAR_TOKEN_PIRA_02=$(token)
-ECOAR_TOKEN_PIRA_03=$(token)
-ECOAR_TOKEN_MARILIA_01=$(token)
-ECOAR_TOKEN_MARILIA_02=$(token)
-
+ECOAR_TOKEN_NO_01=$(token)
+ECOAR_TOKEN_NO_02=$(token)
+ECOAR_TOKEN_NO_03=$(token)
+ECOAR_TOKEN_NO_04=$(token)
+ECOAR_TOKEN_NO_05=$(token)
 ECOAR_TOKEN_OPERADOR=$(token)
 ECOAR_TOKEN_ADMIN=$(token)
 EOF

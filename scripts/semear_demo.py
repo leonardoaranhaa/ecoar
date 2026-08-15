@@ -1,4 +1,4 @@
-"""Semeia o backend real com dado realista de três cidades — a Opção B da
+"""Semeia o backend real com o cenário de Piracicaba — a Opção B da
 reunião de produto.
 
 Não é um mock de tela. É o sistema de verdade: cada evento aqui é um pacote
@@ -17,9 +17,13 @@ Depois:
     python -m backend.cli --config config/backend.demo.yaml
     # abra http://127.0.0.1:8000/  (token operador ou admin da config)
 
-O que a demonstra: UM backend atendendo VÁRIAS instalações (oito nós, três
-cidades) — a fundação do multi-tenant. O isolamento por município (login por
-cidade) é a fase seguinte, planejada em docs/arquitetura-multicidade.md.
+O cenário é **Piracicaba**: cinco pontos tirados do levantamento documental em
+docs/field-notes/piracicaba.md (operação real da Semuttran, requerimentos da
+Câmara, polo de lazer noturno), com perfil horário próprio por ponto.
+
+Os volumes e horários são **construídos** a partir desse levantamento — não são
+medição. Nenhuma gravação foi feita em Piracicaba até aqui; o que o cenário
+mostra é a forma do produto sobre pontos reais, não o volume real da cidade.
 """
 
 from __future__ import annotations
@@ -55,11 +59,22 @@ SEMENTE = 20260811  # demo reprodutível: mesma semente, mesmo banco
 
 
 # ---------------------------------------------------------------------------
-# As oito instalações. Um backend, três cidades — a fundação do multi-tenant.
-# lat/long aproximados de pontos reais; descrição só para o painel ficar legível.
+# Cinco pontos em Piracicaba. Não são endereços sorteados: cada um sai do
+# levantamento documental em docs/field-notes/piracicaba.md — operação real da
+# Semuttran, requerimentos da Câmara, polo de lazer noturno. A descrição carrega
+# a razão do ponto, porque ela aparece na coluna "Local" do painel: quem abre a
+# tela vê por que aquele ponto foi escolhido.
+#
+# O `perfil` define QUANDO os eventos acontecem naquele ponto. É o que faz o
+# mapa de calor ter forma reconhecível para quem mora na cidade — corredor de
+# tráfego satura no fim de tarde, polo de lazer satura na madrugada de sábado.
+#
+# ATENÇÃO: os volumes são construídos, não medidos. Nenhuma gravação foi feita
+# em Piracicaba. Ver a seção "O que este documento NÃO estabelece" da nota.
 # ---------------------------------------------------------------------------
 class No:
-    def __init__(self, no_id, cidade, descricao, lat, lon, token, volume, azimute_base):
+    def __init__(self, no_id, cidade, descricao, lat, lon, token, volume,
+                 azimute_base, perfil="corredor"):
         self.id = no_id
         self.cidade = cidade
         self.descricao = descricao
@@ -68,25 +83,27 @@ class No:
         self.token = token
         self.volume = volume  # quantos eventos este nó gerou no período
         self.azimute_base = azimute_base
+        self.perfil = perfil
 
+
+CIDADE = "Piracicaba"
 
 NOS = [
-    No("bauru-ponte-sao-joao-01", "Bauru", "Ponte da Rua São João, sentido centro",
-       -22.3145, -49.0600, None, 46, 35.0),
-    No("bauru-batalha-centro-02", "Bauru", "Av. Nações Unidas, altura da Batalha",
-       -22.3260, -49.0700, None, 38, 120.0),
-    No("bauru-jardim-europa-03", "Bauru", "Jardim Europa, corredor residencial",
-       -22.3020, -49.0410, None, 17, 210.0),
-    No("piracicaba-beira-rio-01", "Piracicaba", "Beira-Rio, próximo à Rua do Porto",
-       -22.7253, -47.6492, None, 41, 60.0),
-    No("piracicaba-av-independencia-02", "Piracicaba", "Av. Independência, viaduto",
-       -22.7340, -47.6480, None, 29, 150.0),
-    No("piracicaba-vila-rezende-03", "Piracicaba", "Vila Rezende, ponte do Mirante",
-       -22.7110, -47.6510, None, 13, 300.0),
-    No("marilia-sampaio-vidal-01", "Marília", "Av. Sampaio Vidal, área central",
-       -22.2130, -49.9460, None, 34, 90.0),
-    No("marilia-esplanada-02", "Marília", "Esplanada, saída para a SP-294",
-       -22.2000, -49.9600, None, 21, 20.0),
+    No("piracicaba-kennedy-01", CIDADE,
+       "Av. Presidente Kennedy — onde a Semuttran já operou (ago/2023)",
+       -22.7180, -47.6390, None, 52, 35.0, perfil="corredor"),
+    No("piracicaba-centro-hospitalar-02", CIDADE,
+       "Área central / entorno hospitalar — reclamação de pacientes internados",
+       -22.7253, -47.6492, None, 44, 120.0, perfil="centro"),
+    No("piracicaba-joao-conceicao-03", CIDADE,
+       "Av. Dr. João Conceição, Paulista — requerimento por escapamento e som",
+       -22.7412, -47.6301, None, 33, 150.0, perfil="corredor"),
+    No("piracicaba-sao-dimas-04", CIDADE,
+       "São Dimas — requerimento por perturbação do sossego",
+       -22.7096, -47.6605, None, 26, 210.0, perfil="residencial"),
+    No("piracicaba-rua-do-porto-05", CIDADE,
+       "Rua do Porto / Beira-Rio — polo de lazer noturno",
+       -22.7305, -47.6553, None, 38, 60.0, perfil="lazer"),
 ]
 
 
@@ -216,18 +233,53 @@ def _gerar_pacote(config, no_id, evento_id, score, azimute, spl_db, instante_pic
     )
 
 
-def _instante(rng: random.Random, base: datetime) -> float:
-    """Um instante nos últimos 21 dias, pesado para a noite e o fim de semana.
+# Quando o problema acontece, por tipo de ponto. Cada perfil é uma lista de
+# horas prováveis (repetição = mais peso) e o peso relativo de fim de semana.
+#
+# A forma importa mais que o número: um corredor de tráfego satura no fim de
+# tarde de dia útil; um polo de lazer satura na madrugada de sexta e sábado. Se
+# todos os pontos tivessem o mesmo perfil, o mapa de calor viraria uma mancha
+# uniforme — que é justamente o que a prefeitura já tem hoje, e não ajuda a
+# escalar equipe. Os perfis são hipóteses de forma, não medição.
+PERFIS = {
+    # Corredor arterial: pico de deslocamento no fim de tarde, cauda à noite.
+    "corredor": {"horas": [17, 18, 18, 19, 19, 20, 20, 21, 22, 12, 7, 8],
+                 "peso_fim_de_semana": 1.0},
+    # Área central/comercial: fluxo espalhado no dia, ainda forte no início da noite.
+    "centro": {"horas": [10, 11, 12, 13, 14, 16, 17, 18, 18, 19, 19, 20, 21],
+               "peso_fim_de_semana": 0.7},
+    # Residencial: o incômodo que gera requerimento é o da noite e da madrugada.
+    "residencial": {"horas": [20, 21, 22, 22, 23, 23, 0, 1, 2],
+                    "peso_fim_de_semana": 1.6},
+    # Polo de lazer: madrugada, concentrada em sexta e sábado.
+    "lazer": {"horas": [22, 23, 23, 0, 0, 1, 1, 2, 3, 19, 20],
+              "peso_fim_de_semana": 3.2},
+}
 
-    Escapamento adulterado é fenômeno de fim de tarde/madrugada e de fim de
-    semana; concentrar aí faz o mapa de calor contar a história que a prefeitura
-    reconhece — sem isso o painel mostra ruído uniforme, que não é o real.
-    """
-    dia = rng.randint(0, 20)
-    data = base - timedelta(days=dia)
-    # Horas prováveis: começo da madrugada e fim de tarde/noite.
-    horas = [0, 1, 2, 19, 20, 21, 22, 22, 23, 23, 18, 17, 12]
-    hora = rng.choice(horas)
+
+def _instante(rng: random.Random, base: datetime, perfil: str) -> float:
+    """Um instante nos últimos 21 dias, seguindo o perfil horário do ponto."""
+    cfg = PERFIS[perfil]
+    peso_fds = cfg["peso_fim_de_semana"]
+
+    # Sorteia o dia com o fim de semana pesado conforme o perfil do ponto.
+    candidatos = []
+    for dia in range(21):
+        data = base - timedelta(days=dia)
+        # weekday(): 4=sex, 5=sáb, 6=dom
+        peso = peso_fds if data.weekday() in (4, 5) else 1.0
+        candidatos.append((data, peso))
+    total = sum(p for _, p in candidatos)
+    sorteio = rng.random() * total
+    acumulado = 0.0
+    data = candidatos[0][0]
+    for candidato, peso in candidatos:
+        acumulado += peso
+        if sorteio <= acumulado:
+            data = candidato
+            break
+
+    hora = rng.choice(cfg["horas"])
     minuto = rng.randint(0, 59)
     momento = data.replace(hour=hora, minute=minuto, second=rng.randint(0, 59),
                            microsecond=0, tzinfo=timezone.utc)
@@ -267,7 +319,7 @@ def semear(config: ConfigBackend, cliente) -> dict:
                     score = round(rng.uniform(0.62, 0.84), 3)
                     azimute = (no.azimute_base + rng.uniform(-25, 25)) % 360
                     spl_db = round(rng.uniform(74.0, 90.0), 1)
-                instante = _instante(rng, base)
+                instante = _instante(rng, base, no.perfil)
                 evento_id = f"{no.id}-evt-{i:04d}"
 
                 caminho = _gerar_pacote(
@@ -329,7 +381,7 @@ def _heartbeats_e_violacao(config: ConfigBackend, conexao, cliente) -> None:
     'sem sinal' para provar que o monitoramento funciona.
     """
     rng = random.Random(SEMENTE + 1)
-    sem_sinal = "piracicaba-vila-rezende-03"
+    sem_sinal = "piracicaba-sao-dimas-04"
 
     for no in NOS:
         # descrição só entra por aqui: a ingestão não a carrega (não vai na
@@ -355,7 +407,7 @@ def _heartbeats_e_violacao(config: ConfigBackend, conexao, cliente) -> None:
     # Canal patrimonial (D14): uma tentativa de violação de gabinete.
     cliente.post(
         "/v1/alertas",
-        headers={"Authorization": f"Bearer {config.tokens['bauru-batalha-centro-02']}"},
+        headers={"Authorization": f"Bearer {config.tokens['piracicaba-centro-hospitalar-02']}"},
         json={
             "tipo": "abertura_gabinete",
             "capturado_em": datetime.now(tz=timezone.utc).isoformat(),
@@ -395,7 +447,7 @@ def main(argv=None) -> int:
         resumo = semear(config, cliente)
         _heartbeats_e_violacao(config, conexao, cliente)
 
-    print("\nSemeadura concluída — sistema real, dado de três cidades.\n")
+    print("\nSemeadura concluída — sistema real, cenário de Piracicaba.\n")
     print(f"  eventos enviados ..... {resumo['enviados']}")
     print(f"  confirmados .......... {resumo['confirmados']}  (entram na priorização)")
     print(f"  rejeitados ........... {resumo['rejeitados']}")

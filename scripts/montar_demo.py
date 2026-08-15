@@ -193,6 +193,8 @@ RELATORIO_DEMO = '''function exportarRelatorio() {
       <iframe id="quadro-rel"></iframe>
     </div>`;
   document.body.appendChild(fundo);
+  fundo.style.height = document.documentElement.scrollHeight + "px";
+  window.scrollTo({ top: 0, behavior: "instant" });
   document.getElementById("quadro-rel").srcdoc = D.relatorio;
   document.getElementById("fechar-rel").onclick = () => fundo.remove();
   document.getElementById("imprimir-rel").onclick = () => {
@@ -213,25 +215,103 @@ $("token").value = "admin-studio-cerne";
 $("token").type = "text";
 const dica = document.createElement("p");
 dica.className = "rodape-acesso";
-dica.innerHTML = "<strong>Demonstração.</strong> Qualquer token entra. " +
-  "Use um token com <em>operador</em> para ver o painel sem as telas de " +
-  "admin (Modelo e Auditoria).";
+dica.innerHTML = "<strong>Demonstração — cenário de Piracicaba.</strong> " +
+  "Cinco pontos escolhidos a partir de documentos públicos do município " +
+  "(operação da Semuttran, requerimentos da Câmara). Os volumes são " +
+  "construídos para a demonstração, <em>não</em> são medição de campo.<br><br>" +
+  "Qualquer token entra. Use um token com <em>operador</em> para ver o painel " +
+  "sem as telas de admin (Modelo e Auditoria).";
 $("form-acesso").insertBefore(dica, $("erro-acesso"));'''
 
 CSS_DEMO_EXTRA = '''
+/* -- demonstração: layout à prova de iframe e de celular ----------- */
+/* O painel real assume a página inteira: usa 100vh e position:fixed, o que é
+   correto quando ele é o documento. A demo, não — ela roda dentro do iframe do
+   Artifact (que se redimensiona à altura do conteúdo) e em tela de celular. Nos
+   dois casos 100vh e fixed desmontam o layout: o painel encolhe para uma faixa,
+   o conteúdo é cortado e as camadas fixas escapam por cima do host.
+   Aqui o layout volta a ser fluxo de documento. Vale só para a demo — o
+   dashboard real continua intacto. */
+html, body { height: auto; }
+#painel { min-height: 0; grid-template-columns: 220px minmax(0, 1fr); }
+.lateral { position: static; height: auto; }
+.conteudo { max-height: none; overflow-y: visible; }
+.coluna-fila { max-height: none; }
+
+/* `1fr` é `minmax(auto, 1fr)`: a faixa não encolhe abaixo do min-content, então
+   uma tabela larga empurrava o painel inteiro para fora da tela (o texto saía
+   cortado no celular). `minmax(0, 1fr)` deixa encolher; quem é largo de verdade
+   — o mapa de calor, as tabelas — rola dentro do próprio bloco. */
+.lateral, .principal, .conteudo, .revisao > *, .topo-tela > * { min-width: 0; }
+
+/* Empilha de verdade no celular: a lateral vira topo, e o item ativo é marcado
+   embaixo (a borda à esquerda some quando a navegação é horizontal). */
+@media (max-width: 860px) {
+  #painel { grid-template-columns: 1fr; }
+  .lateral { flex-direction: column; }
+  .marca-lateral, .rodape-lateral { width: 100%; }
+  .navegacao { display: flex; flex-direction: row; flex-wrap: wrap; padding: 6px; gap: 2px; }
+  .item-nav {
+    width: auto; flex: 0 0 auto; padding: 8px 12px;
+    border-left: none; border-bottom: 3px solid transparent; border-radius: 6px;
+  }
+  .item-nav.ativo { border-left-color: transparent; border-bottom-color: var(--laranja); }
+  .conteudo { padding: 18px 14px; }
+  .topo-tela h1 { font-size: 19px; }
+
+  /* Mapa de calor: sem `width:100%` + `table-layout:fixed` a tabela usava só o
+     que o conteúdo pedia (~220px) e sobrava metade da tela vazia. Com layout
+     fixo, só a largura da 1ª linha (os <th>) importa — a coluna da hora fica
+     estreita, o resto do espaço se reparte igual entre os 7 dias. */
+  .heatmap { width: 100%; table-layout: fixed; font-size: 10px; }
+  .heatmap th:first-child, .heatmap td.hora { width: 30px; }
+
+  /* Toda tabela de dados: um nó/hash/id sem espaço (ex.: `sha256:19b6…`,
+     `piracicaba-centro-hospitalar-02`) não tem onde quebrar linha por padrão, e
+     isso empurrava a PÁGINA INTEIRA para o lado — era a causa do "vazando".
+     `overflow-wrap:anywhere` dá à célula onde quebrar; a tabela continua com
+     `table-layout:auto` (proporcional ao conteúdo, como no desktop) — testado
+     `table-layout:fixed` aqui e ficou pior: colunas curtas (ESTADO, BATERIA)
+     ganhavam a mesma largura da coluna de texto longo (LOCAL), quebrando
+     palavra por letra. Auto deixa a coluna curta ficar curta. */
+  .tabela { width: 100%; }
+  .tabela td, .tabela th {
+    padding: 8px 6px; font-size: 12.5px;
+    overflow-wrap: anywhere; word-break: break-word;
+  }
+
+  /* -- fila de revisão: lista OU detalhe, nunca as duas empilhadas --
+     Empilhado (lista longa, depois o detalhe embaixo) obrigava a rolar a
+     página inteira para ver o que acabou de ser clicado — confuso numa
+     apresentação, onde quem está vendo espera a resposta na hora. Aqui a
+     lista some quando um evento é aberto, e um botão "Voltar" retorna a ela;
+     o script (ver .voltar-fila abaixo) cuida de trocar a classe e rolar ao
+     topo. */
+  .revisao { grid-template-columns: 1fr; }
+  .coluna-fila { border-right: none; padding-right: 0; }
+  .revisao.detalhe-aberto .coluna-fila { display: none; }
+  .revisao:not(.detalhe-aberto) #detalhe { display: none; }
+  .voltar-fila { margin-bottom: 16px; }
+
+  /* O que ainda assim for largo por natureza rola dentro do próprio bloco. */
+  .bloco, .grade-medidas, .filtros { overflow-x: auto; }
+}
+
 /* -- demonstração: faixa e sobreposição do relatório --------------- */
 .faixa-demo {
-  position: fixed; top: 0; right: 0; z-index: 50;
+  position: absolute; top: 0; right: 0; z-index: 50;
   background: var(--laranja); color: #17110d; font-family: var(--mono);
   font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
   padding: 4px 12px; border-bottom-left-radius: 6px; font-weight: 600;
 }
 .sobreposicao-relatorio {
-  position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.72);
-  display: grid; place-items: center; padding: 24px;
+  /* absolute + altura do documento: dentro do iframe do Artifact, `fixed`
+     ancorava na viewport da página hospedeira e a janela saía do lugar. */
+  position: absolute; left: 0; top: 0; width: 100%; z-index: 100;
+  background: rgba(0,0,0,0.82); display: grid; place-items: start center; padding: 24px;
 }
 .janela-relatorio {
-  width: min(900px, 100%); height: min(90vh, 100%);
+  width: min(900px, 100%); height: min(90vh, 720px);
   background: #fff; border-radius: 10px; overflow: hidden;
   display: flex; flex-direction: column;
 }
@@ -255,12 +335,12 @@ FAIXA_DEMO = ('<div class="faixa-demo" title="Dados de exemplo — não é captu
 TOUR_CSS = '''
 /* -- tour guiado (demonstração) ---------------------------------- */
 .tour-hi {
-  position: fixed; z-index: 200; border-radius: 8px; pointer-events: none;
+  position: absolute; z-index: 200; border-radius: 8px; pointer-events: none;
   box-shadow: 0 0 0 4px var(--laranja), 0 0 0 9999px rgba(6,8,10,0.74);
   transition: all 0.25s ease;
 }
 .tour-card {
-  position: fixed; z-index: 201; width: min(340px, calc(100vw - 32px));
+  position: absolute; z-index: 201; width: min(340px, calc(100vw - 32px));
   background: var(--superficie-alta); border: 1px solid var(--borda);
   border-radius: 12px; padding: 18px 18px 16px; box-shadow: 0 16px 50px rgba(0,0,0,0.5);
 }
@@ -274,13 +354,8 @@ TOUR_CSS = '''
 .tour-ant { background: transparent; border: 1px solid var(--borda); color: var(--texto-fraco); }
 .tour-pular { background: transparent; border: none; color: var(--texto-fraco); font-size: 12px; }
 .tour-pular:hover { color: var(--texto); }
-.tour-ajuda {
-  position: fixed; left: 18px; bottom: 18px; z-index: 120;
-  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--borda);
-  background: var(--superficie-alta); color: var(--ambar); font-size: 18px;
-  cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-}
-.tour-ajuda:hover { border-color: var(--ambar); }
+.tour-ajuda { color: var(--ambar); font-size: 12.5px; padding: 7px 10px; }
+.tour-ajuda:hover { border-color: var(--ambar); color: var(--ambar); }
 @media (prefers-reduced-motion: reduce) { .tour-hi { transition: none; } }
 '''
 
@@ -291,12 +366,12 @@ TOUR_JS = r'''
   const $ = (id) => document.getElementById(id);
 
   const passos = [
-    { alvo: ".marca-lateral", titulo: "Bem-vindo ao ECOAR",
-      corpo: "Plataforma de fiscalização sonora em <b>modo de triagem</b>: o sistema ouve, localiza e registra ocorrências de escapamento — e mostra à prefeitura onde e quando o problema é pior. Vou apresentar o essencial em um minuto." },
+    { alvo: ".marca-lateral", titulo: "ECOAR — cenário de Piracicaba",
+      corpo: "Plataforma de fiscalização sonora em <b>modo de triagem</b>: ouve, localiza e registra ocorrências de escapamento, e mostra onde e quando o problema é pior. Os <b>cinco pontos</b> desta tela saíram de levantamento documental sobre Piracicaba — operação da Semuttran na Av. Presidente Kennedy, requerimentos da Câmara, polo de lazer da Rua do Porto. Vou apresentar o essencial em um minuto." },
     { tela: "priorizacao", alvo: ".heatmap", titulo: "Quando o problema é pior",
       corpo: "Mapa de calor por dia da semana × hora, só de eventos <b>confirmados por operador</b>. É o que a prefeitura leva para a equipe de blitz — direciona a fiscalização humana que já existe." },
     { tela: "priorizacao", alvo: ".bloco:last-of-type .tabela", titulo: "Onde o problema é pior",
-      corpo: "Os pontos ordenados por ocorrências confirmadas, nas três cidades. O produto responde <b>onde e quando</b> — não <b>quem</b>: em triagem, placa não é lida." },
+      corpo: "Os cinco pontos de Piracicaba ordenados por ocorrências confirmadas. Cada ponto saiu de um documento — operação da Semuttran, requerimento da Câmara, polo de lazer. O produto responde <b>onde e quando</b> — não <b>quem</b>: em triagem, placa não é lida." },
     { tela: "revisao", alvo: ".coluna-fila", titulo: "Toda ocorrência passa por um humano",
       corpo: "Nenhum evento vira estatística sozinho. O operador revisa cada um antes de contar — é a regra que dá valor jurídico à evidência." },
     { tela: "revisao", abrir: true, alvo: ".grade-medidas", titulo: "O que o nó mediu",
@@ -310,7 +385,7 @@ TOUR_JS = r'''
     { tela: "auditoria", alvo: ".grade-cartoes", titulo: "À prova de adulteração", admin: true,
       corpo: "Cada passo — recebimento, acesso à evidência, decisão — é encadeado por hash. Mexer no histórico quebra a cadeia, e o painel acusa na hora." },
     { alvo: ".marca-lateral", titulo: "Pronto",
-      corpo: "Explore à vontade — os dados são de exemplo, de três cidades. Clique no <b>?</b> no canto para rever este guia quando quiser." },
+      corpo: "Explore à vontade. O cenário é de <b>Piracicaba</b>, com pontos tirados de documentos públicos — mas os volumes são construídos, não medidos: a campanha de gravação em campo é o passo seguinte. Clique no <b>?</b> no canto para rever este guia." },
   ];
 
   let idx = 0, hi = null, card = null, ativo = false;
@@ -365,13 +440,19 @@ TOUR_JS = r'''
 
   function posicionar(alvo, i) {
     limpar();
+    /* Coordenadas de DOCUMENTO, não de viewport: as camadas do tour são
+       position:absolute porque a demo roda dentro do iframe do Artifact, que se
+       redimensiona à altura do conteúdo. Com position:fixed elas escapavam por
+       cima da página hospedeira. */
+    const sx = window.pageXOffset, sy = window.pageYOffset;
     const r = alvo.getBoundingClientRect();
     const pad = 6;
+    const larguraDoc = document.documentElement.clientWidth;
     hi = document.createElement("div");
     hi.className = "tour-hi";
-    hi.style.left = Math.max(4, r.left - pad) + "px";
-    hi.style.top = Math.max(4, r.top - pad) + "px";
-    hi.style.width = Math.min(window.innerWidth - 8, r.width + pad * 2) + "px";
+    hi.style.left = Math.max(4, r.left + sx - pad) + "px";
+    hi.style.top = Math.max(4, r.top + sy - pad) + "px";
+    hi.style.width = Math.min(larguraDoc - 8, r.width + pad * 2) + "px";
     hi.style.height = (r.height + pad * 2) + "px";
     document.body.appendChild(hi);
 
@@ -388,16 +469,21 @@ TOUR_JS = r'''
        </div>`;
     document.body.appendChild(card);
 
-    // posiciona o cartão: abaixo do alvo se couber, senão acima; preso à tela.
+    /* Posiciona o cartão abaixo do alvo se couber na janela visível, senão
+       acima; e sempre dentro da largura do documento. Tudo convertido para
+       coordenadas de documento no fim. */
     const cr = card.getBoundingClientRect();
+    const alturaVisivel = window.innerHeight;
     let top = r.bottom + 12;
-    if (top + cr.height > window.innerHeight - 12) top = r.top - cr.height - 12;
-    if (top < 12) top = 12;
+    if (top + cr.height > alturaVisivel - 12) {
+      const acima = r.top - cr.height - 12;
+      top = acima >= 12 ? acima : Math.max(12, alturaVisivel - cr.height - 12);
+    }
     let left = r.left;
-    if (left + cr.width > window.innerWidth - 12) left = window.innerWidth - cr.width - 12;
+    if (left + cr.width > larguraDoc - 12) left = larguraDoc - cr.width - 12;
     if (left < 12) left = 12;
-    card.style.top = top + "px";
-    card.style.left = left + "px";
+    card.style.top = (top + sy) + "px";
+    card.style.left = (left + sx) + "px";
 
     card.querySelector(".tour-prox").onclick = () => mostrar(i + 1, 1);
     const ant = card.querySelector(".tour-ant");
@@ -421,11 +507,14 @@ TOUR_JS = r'''
     if ($("tour-ajuda")) return;
     const b = document.createElement("button");
     b.id = "tour-ajuda";
-    b.className = "tour-ajuda";
+    b.className = "tour-ajuda secundario";
     b.title = "Rever o guia";
-    b.textContent = "?";
+    b.textContent = "? Rever o guia";
     b.onclick = iniciar;
-    document.body.appendChild(b);
+    /* No rodapé da lateral, junto do "Sair": flutuando sobre o conteúdo ele
+       cobria a tabela no celular. */
+    const rodape = document.querySelector(".rodape-lateral");
+    (rodape || document.body).appendChild(b);
   }
 
   window.addEventListener("resize", () => { if (ativo) posicionar(document.querySelector(passos[idx].alvo) || document.querySelector(".marca-lateral"), idx); });
@@ -443,6 +532,69 @@ TOUR_JS = r'''
 '''
 
 FAIXA_DEMO_FIM = ""  # marcador
+
+# ---------------------------------------------------------------------------
+# Fila de revisão no celular — lista OU detalhe, nunca as duas empilhadas.
+#
+# Na tela larga a fila e o detalhe ficam lado a lado (.revisao é grid de duas
+# colunas); no celular a regra em CSS_DEMO_EXTRA empilha as duas embaixo uma
+# da outra — o que force rolar a lista inteira para ver o que acabou de ser
+# clicado. Numa apresentação isso é falha visível: quem está assistindo espera
+# a resposta na hora do clique. Este script troca embaixo por alternância: a
+# lista some quando um evento abre, mostra o detalhe do topo, e um botão
+# "Voltar" restaura a lista. Só na demo — o dashboard real não empilha porque
+# tem a viewport larga do desktop.
+# ---------------------------------------------------------------------------
+MESTRE_DETALHE_JS = r'''
+(function () {
+  "use strict";
+
+  function ehMobile() {
+    return window.matchMedia("(max-width: 860px)").matches;
+  }
+
+  const PLACEHOLDER =
+    '<div class="placeholder"><p>Selecione um evento na fila.</p>' +
+    '<p class="dica">Nenhum evento é contado sozinho: a priorização se ' +
+    "alimenta do que você confirmar aqui.</p></div>";
+
+  function aplicar() {
+    const revisao = document.querySelector(".revisao");
+    const detalhe = document.getElementById("detalhe");
+    if (!revisao || !detalhe) return;
+
+    if (!ehMobile()) {
+      revisao.classList.remove("detalhe-aberto");
+      return;
+    }
+
+    const temSelecao = !!detalhe.querySelector(".topo-tela");
+
+    if (temSelecao && !detalhe.querySelector(".voltar-fila")) {
+      const botao = document.createElement("button");
+      botao.type = "button";
+      botao.className = "secundario voltar-fila";
+      botao.textContent = "← Voltar à fila";
+      botao.addEventListener("click", () => {
+        detalhe.innerHTML = PLACEHOLDER;
+        revisao.classList.remove("detalhe-aberto");
+        if (typeof estado !== "undefined") estado.selecionado = null;
+        if (typeof desenharListaRevisao === "function") desenharListaRevisao();
+        window.scrollTo({ top: 0, behavior: "instant" });
+      });
+      detalhe.prepend(botao);
+    }
+
+    revisao.classList.toggle("detalhe-aberto", temSelecao);
+    if (temSelecao) window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  const observador = new MutationObserver(aplicar);
+  const alvo = document.getElementById("conteudo") || document.body;
+  observador.observe(alvo, { childList: true, subtree: true });
+  window.addEventListener("resize", aplicar);
+})();
+'''
 
 
 def transformar_painel() -> str:
@@ -492,6 +644,7 @@ def montar(standalone: bool) -> str:
         f"<script>{dados}</script>",
         f"<script>{painel}</script>",
         f"<script>{TOUR_JS}</script>",
+        f"<script>{MESTRE_DETALHE_JS}</script>",
     ]
     conteudo = "\n".join(partes)
 

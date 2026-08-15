@@ -1,6 +1,6 @@
 # deploy/ — a demo da Opção B rodando num VPS
 
-Sobe o **sistema real** do ECOAR (backend + painel), semeado com três cidades,
+Sobe o **sistema real** do ECOAR (backend + painel), semeado com o cenário de Piracicaba,
 num servidor acessível pela internet. É o que você leva para uma reunião de
 produto quando a plateia é técnica e a pergunta é "mostra funcionando".
 
@@ -11,9 +11,9 @@ trilha de auditoria reais.
 ## O que sobe
 
 - um contêiner só, com FastAPI + SQLite (o mesmo backend da etapa 11);
-- semeado no primeiro boot com 8 nós em Bauru, Piracicaba e Marília, 239 eventos
-  enviados pela API real, ~170 confirmados por operador, um nó fora do ar e um
-  alerta patrimonial;
+- semeado no primeiro boot com 5 pontos de Piracicaba (tirados do levantamento
+  em `docs/field-notes/piracicaba.md`), ~193 eventos enviados pela API real,
+  confirmados por operador, um nó fora do ar e um alerta patrimonial;
 - painel em `http://SEU_IP:8000/`.
 
 Acesso por **IP:porta**, protegido por token forte. Sem domínio, sem HTTPS —
@@ -74,7 +74,7 @@ do painel na reunião. (O `.env` nunca vai para o Git.)
 docker compose up -d
 ```
 
-O primeiro boot constrói a imagem e **semeia as três cidades** — leva um ou dois
+O primeiro boot constrói a imagem e **semeia o cenário de Piracicaba** — leva um ou dois
 minutos. Acompanhe:
 
 ```bash
@@ -96,7 +96,7 @@ ufw allow 8000/tcp
 
 No navegador: `http://SEU_IP:8000/`. Cole o token do operador (ou o do admin,
 que também vê **Modelo** e **Auditoria**). Pronto — priorização, nós, revisão e a
-trilha de auditoria, com dado das três cidades.
+trilha de auditoria, com o cenário de Piracicaba.
 
 ## Operação
 
