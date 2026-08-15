@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -121,6 +122,13 @@ def montar_pacote(
     caminho_audio = destino.parent / f"{evento_id}-audio.wav"
     escrever_wav(caminho_audio, np.asarray(evento.amostras), evento.taxa_amostragem)
 
+    # Grava num arquivo temporário e só move para `destino` no fim, com sucesso.
+    # Sem isso, uma falha no meio da escrita do zip (mídia sumiu do disco entre
+    # o acionamento e a montagem, por exemplo) deixaria um `.ecoar` parcial no
+    # caminho final — e cadeia de custódia (D8) não convive com "pacote que
+    # existe mas está incompleto": ou o evento tem evidência completa, ou não
+    # tem nenhuma.
+    temporario = destino.with_name(destino.name + ".tmp")
     try:
         arquivos: list[tuple[str, Path]] = [(f"{PASTA_MIDIA}/audio.wav", caminho_audio)]
         for captura in acionamento.capturas:
@@ -137,12 +145,14 @@ def montar_pacote(
         )
         manifesto[CAMPO_HASH] = calcular_hash_manifesto(manifesto)
 
-        with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as pacote:
+        with zipfile.ZipFile(temporario, "w", zipfile.ZIP_DEFLATED) as pacote:
             pacote.writestr(NOME_MANIFESTO, canonico(manifesto))
             for nome, caminho in arquivos:
                 pacote.write(caminho, nome)
+        os.replace(temporario, destino)
     finally:
         caminho_audio.unlink(missing_ok=True)
+        temporario.unlink(missing_ok=True)
 
     return destino
 

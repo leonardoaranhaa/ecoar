@@ -277,8 +277,8 @@ function desenharListaRevisao() {
       return `<li class="item ${estado.selecionado === evento.id ? "selecionado" : ""}" data-id="${evento.id}">
         <div class="item-topo"><span class="item-classe">${texto(evento.classe) || "—"}</span>
           <span class="item-score">${score}</span></div>
-        <div class="item-meta">${quando(evento.capturado_em)} · ${evento.no_id} · ${ang}</div>
-        <span class="etiqueta ${evento.acao}">${evento.acao}</span>
+        <div class="item-meta">${quando(evento.capturado_em)} · ${texto(evento.no_id)} · ${ang}</div>
+        <span class="etiqueta ${texto(evento.acao)}">${texto(evento.acao)}</span>
       </li>`;
     })
     .join("");
@@ -303,7 +303,7 @@ function desenharDetalhe(evento) {
 
   $("detalhe").innerHTML = `
     <div class="topo-tela"><div><h1 style="font-size:19px">${texto(evento.classe) || "evento"}</h1>
-      <div class="sub">${evento.evento_id} · ${evento.no_id} · ${quando(evento.capturado_em)}</div></div>
+      <div class="sub">${texto(evento.evento_id)} · ${texto(evento.no_id)} · ${quando(evento.capturado_em)}</div></div>
       <span class="etiqueta ${evento.status}">${rotuloStatus(evento.status)}</span></div>
     <div id="mensagem"></div>
     <div class="grade-medidas">
@@ -351,7 +351,7 @@ function imagensBloco(evento, manifesto) {
   const figuras = imagens.map((im) => {
     const nome = (im.arquivo || "").replace("midia/", "");
     const sim = im.simulada ? " · CAPTURA SIMULADA" : "";
-    return `<figure><img data-src="/v1/eventos/${evento.id}/midia/${nome}" alt="${texto(im.tipo)}">
+    return `<figure><img data-src="/v1/eventos/${evento.id}/midia/${texto(nome)}" alt="${texto(im.tipo)}">
       <figcaption>${texto(im.tipo)} · ${texto(im.resolucao)}${sim}</figcaption></figure>`;
   }).join("");
   return `<div class="bloco"><h3>Imagens</h3><div class="imagens">${figuras}</div></div>`;
@@ -421,7 +421,7 @@ async function telaNos() {
 async function telaViolacoes() {
   const dados = await api("/v1/violacoes");
   const linhas = dados.violacoes.map((v) => `<tr>
-      <td><span class="etiqueta ${v.atendido ? "rejeitado" : "offline"}">${v.tipo}</span></td>
+      <td><span class="etiqueta ${v.atendido ? "rejeitado" : "offline"}">${texto(v.tipo)}</span></td>
       <td>${texto(v.no_id)}</td>
       <td>${quando(v.recebido_em + "Z")}</td>
       <td>${v.atendido ? "atendido" : `<button class="secundario" data-atender="${v.id}">Marcar atendido</button>`}</td>

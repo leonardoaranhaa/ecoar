@@ -10,7 +10,12 @@ from backend import db
 from backend.aplicacao import criar_app
 from backend.config import ConfigBackend
 from edge.config import ConfiguracaoInvalida
-from edge.evidence_packager import NOME_MANIFESTO, canonico
+from edge.evidence_packager import (
+    CAMPO_HASH,
+    NOME_MANIFESTO,
+    calcular_hash_manifesto,
+    canonico,
+)
 from tests.conftest_backend import gerar_pacote
 
 TOKEN_NO = "token-do-no-de-teste-0123456789"
@@ -123,6 +128,35 @@ def test_pacote_adulterado_e_recusado_e_a_recusa_fica_registrada(ambiente):
     rejeicoes = list(conexao.execute("SELECT * FROM rejeicoes"))
     assert len(rejeicoes) == 1
     assert "hash do manifesto" in rejeicoes[0]["motivo"]
+    assert list(conexao.execute("SELECT COUNT(*) c FROM eventos"))[0]["c"] == 0
+
+
+def test_instante_pico_absurdo_e_recusado_sem_derrubar_o_pedido(ambiente):
+    """Relógio de RTC corrompido no campo (ou manifesto malicioso) não pode
+    virar 500: a garantia do módulo é que toda rejeição fica registrada."""
+    cliente, conexao, tmp_path = ambiente
+    pacote = gerar_pacote(tmp_path / "evt.ecoar")
+
+    with zipfile.ZipFile(pacote) as origem:
+        conteudo = {nome: origem.read(nome) for nome in origem.namelist()}
+    manifesto = json.loads(conteudo[NOME_MANIFESTO])
+    manifesto["instante_pico_epoch"] = 1e30
+    manifesto[CAMPO_HASH] = calcular_hash_manifesto(manifesto)
+    conteudo[NOME_MANIFESTO] = canonico(manifesto)
+
+    adulterado = tmp_path / "instante-absurdo.ecoar"
+    with zipfile.ZipFile(adulterado, "w") as saida:
+        for nome, dados in conteudo.items():
+            saida.writestr(nome, dados)
+
+    resposta = enviar(cliente, adulterado)
+
+    assert resposta.status_code == 422
+    assert "instante_pico_epoch" in str(resposta.json()["detail"]["problemas"])
+
+    rejeicoes = list(conexao.execute("SELECT * FROM rejeicoes"))
+    assert len(rejeicoes) == 1
+    assert "instante_pico_epoch" in rejeicoes[0]["motivo"]
     assert list(conexao.execute("SELECT COUNT(*) c FROM eventos"))[0]["c"] == 0
 
 

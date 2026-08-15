@@ -443,8 +443,9 @@ def listar_violacoes(
     )
 
 
-def atender_violacao(conexao: sqlite3.Connection, violacao_id: int) -> None:
-    conexao.execute("UPDATE violacoes SET atendido = 1 WHERE id = ?", (violacao_id,))
+def atender_violacao(conexao: sqlite3.Connection, violacao_id: int) -> bool:
+    cursor = conexao.execute("UPDATE violacoes SET atendido = 1 WHERE id = ?", (violacao_id,))
+    return cursor.rowcount > 0
 
 
 # -- priorização e métricas (modo=triagem) -----------------------------

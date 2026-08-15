@@ -107,6 +107,7 @@ class DetectorViolacao:
         # cada 0,1 s.
         self._aberto_antes = False
         self._na_bateria_antes = False
+        self._em_manutencao_antes = False
 
     # -- ciclo de vida ---------------------------------------------------
 
@@ -181,6 +182,19 @@ class DetectorViolacao:
         """Uma passada por todos os sensores. Devolve os alertas disparados."""
         disparados: list[AlertaViolacao] = []
         em_manutencao = self.em_manutencao
+
+        # A manutenção acabou de terminar (por prazo ou por sair_manutencao()):
+        # rearma a detecção de borda. Sem isso, uma condição que já estava
+        # ativa QUANDO a manutenção suspendia os alertas (tampa aberta, nó na
+        # bateria) nunca dispararia depois — a borda foi consumida em silêncio
+        # durante a supressão, e só uma nova transição (fechar e abrir de novo)
+        # acionaria o alarme. Isso violaria a garantia do módulo: manutenção
+        # expirada com violação em curso precisa soar, não ficar muda até
+        # alguém mexer de novo no sensor.
+        if self._em_manutencao_antes and not em_manutencao:
+            self._aberto_antes = False
+            self._na_bateria_antes = False
+        self._em_manutencao_antes = em_manutencao
 
         leitura = self._inercial.ler()
 

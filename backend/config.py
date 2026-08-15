@@ -38,10 +38,33 @@ class ConfigBackend:
                 raise ConfiguracaoInvalida(
                     f"token do operador {operador!r} ausente ou curto demais"
                 )
+        _recusar_token_duplicado(self.tokens, "backend.tokens")
+        _recusar_token_duplicado(self.tokens_operador, "backend.tokens_operador")
 
     @property
     def tamanho_maximo_bytes(self) -> int:
         return int(self.tamanho_maximo_pacote_mb * 1024 * 1024)
+
+
+def _recusar_token_duplicado(tokens: dict[str, str], onde: str) -> None:
+    """Dois nomes com o mesmo token colidem em identidade, não só em acesso.
+
+    A autenticação (`backend/seguranca.py`) resolve um token para UM nome; com
+    dois nomes cadastrados no mesmo valor, o resultado é sempre o último do
+    dict, e o outro nome nunca é distinguível dele. Para um nó isso vira 403
+    confuso (o manifesto declara um id que não bate com o resolvido); para um
+    operador, é pior — a ação entra na trilha de auditoria em nome de outra
+    pessoa. Um erro de copiar/colar no YAML não pode virar isso em silêncio.
+    """
+    por_token: dict[str, list[str]] = {}
+    for nome, token in tokens.items():
+        por_token.setdefault(token, []).append(nome)
+    colisoes = {token: nomes for token, nomes in por_token.items() if len(nomes) > 1}
+    if colisoes:
+        detalhe = "; ".join(
+            f"{sorted(nomes)} compartilham o mesmo token" for nomes in colisoes.values()
+        )
+        raise ConfiguracaoInvalida(f"{onde}: {detalhe} — cada identidade precisa do seu")
 
 
 def de_dict(dados: dict) -> ConfigBackend:

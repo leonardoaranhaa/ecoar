@@ -23,6 +23,7 @@ import time
 
 import numpy as np
 
+from edge.audio_capture.buffer import JanelaIndisponivel
 from edge.audio_capture.captura import CapturaAudio
 from edge.audio_capture.sintetico import CenaSintetica
 from edge.config import ConfiguracaoInvalida, carregar
@@ -87,7 +88,7 @@ def ao_vivo(caminho_config: str, duracao: float, intervalo: float) -> int:
                 break
             try:
                 janela = captura.ultimos(0.5)
-            except Exception:  # buffer ainda curto
+            except JanelaIndisponivel:  # buffer ainda curto
                 time.sleep(intervalo)
                 continue
 

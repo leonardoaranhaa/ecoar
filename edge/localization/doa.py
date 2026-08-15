@@ -16,7 +16,7 @@ confiança cai, em vez de o sistema apontar com falsa precisão.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -136,11 +136,8 @@ class Localizador:
         estimativa = self.estimar(janela.amostras, janela.taxa_amostragem)
         if estimativa.instante_analise is None:
             return estimativa
-        return EstimativaDOA(
-            **{
-                **estimativa.__dict__,
-                "instante_analise": janela.inicio + estimativa.instante_analise,
-            }
+        return replace(
+            estimativa, instante_analise=janela.inicio + estimativa.instante_analise
         )
 
     # -- internos --------------------------------------------------------

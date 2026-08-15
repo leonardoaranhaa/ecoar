@@ -233,6 +233,24 @@ def test_audio_de_audicao_e_mono_16_bits(ambiente):
         assert arquivo.getnframes() > 0
 
 
+def test_ouvir_audio_de_audicao_tambem_registra_acesso_a_evidencia(ambiente):
+    """A conversão para audição lê o áudio original de dentro do pacote — o
+    mesmo tipo de acesso que /midia/{nome} já registra na trilha."""
+    from backend.audit_log import ACESSO_EVIDENCIA, TrilhaAuditoria
+
+    cliente, conexao, tmp_path = ambiente
+    identificador = ingerir(cliente, tmp_path)
+
+    cliente.get(
+        f"/v1/eventos/{identificador}/audio-audicao.wav", headers=como_operador()
+    )
+
+    entradas = TrilhaAuditoria(conexao).listar()
+    acessos = [e for e in entradas if e.tipo == ACESSO_EVIDENCIA]
+    assert len(acessos) == 1
+    assert acessos[0].detalhe["midia"] == "audio-audicao.wav"
+
+
 def test_audio_da_evidencia_continua_de_quatro_canais(ambiente):
     """A conversão para audição não substitui a evidência."""
     cliente, _, tmp_path = ambiente
