@@ -193,6 +193,8 @@ RELATORIO_DEMO = '''function exportarRelatorio() {
       <iframe id="quadro-rel"></iframe>
     </div>`;
   document.body.appendChild(fundo);
+  fundo.style.height = document.documentElement.scrollHeight + "px";
+  window.scrollTo({ top: 0, behavior: "instant" });
   document.getElementById("quadro-rel").srcdoc = D.relatorio;
   document.getElementById("fechar-rel").onclick = () => fundo.remove();
   document.getElementById("imprimir-rel").onclick = () => {
@@ -222,19 +224,63 @@ dica.innerHTML = "<strong>Demonstração — cenário de Piracicaba.</strong> " 
 $("form-acesso").insertBefore(dica, $("erro-acesso"));'''
 
 CSS_DEMO_EXTRA = '''
+/* -- demonstração: layout à prova de iframe e de celular ----------- */
+/* O painel real assume a página inteira: usa 100vh e position:fixed, o que é
+   correto quando ele é o documento. A demo, não — ela roda dentro do iframe do
+   Artifact (que se redimensiona à altura do conteúdo) e em tela de celular. Nos
+   dois casos 100vh e fixed desmontam o layout: o painel encolhe para uma faixa,
+   o conteúdo é cortado e as camadas fixas escapam por cima do host.
+   Aqui o layout volta a ser fluxo de documento. Vale só para a demo — o
+   dashboard real continua intacto. */
+html, body { height: auto; }
+#painel { min-height: 0; grid-template-columns: 220px minmax(0, 1fr); }
+.lateral { position: static; height: auto; }
+.conteudo { max-height: none; overflow-y: visible; }
+.coluna-fila { max-height: none; }
+
+/* `1fr` é `minmax(auto, 1fr)`: a faixa não encolhe abaixo do min-content, então
+   uma tabela larga empurrava o painel inteiro para fora da tela (o texto saía
+   cortado no celular). `minmax(0, 1fr)` deixa encolher; quem é largo de verdade
+   — o mapa de calor, as tabelas — rola dentro do próprio bloco. */
+.lateral, .principal, .conteudo, .revisao > *, .topo-tela > * { min-width: 0; }
+
+/* Empilha de verdade no celular: a lateral vira topo, e o item ativo é marcado
+   embaixo (a borda à esquerda some quando a navegação é horizontal). */
+@media (max-width: 860px) {
+  #painel { grid-template-columns: 1fr; }
+  .lateral { flex-direction: column; }
+  .marca-lateral, .rodape-lateral { width: 100%; }
+  .navegacao { display: flex; flex-direction: row; flex-wrap: wrap; padding: 6px; gap: 2px; }
+  .item-nav {
+    width: auto; flex: 0 0 auto; padding: 8px 12px;
+    border-left: none; border-bottom: 3px solid transparent; border-radius: 6px;
+  }
+  .item-nav.ativo { border-left-color: transparent; border-bottom-color: var(--laranja); }
+  .revisao { grid-template-columns: 1fr; }
+  .coluna-fila { border-right: none; padding-right: 0; }
+  .conteudo { padding: 18px 14px; }
+  /* O que é largo por natureza rola dentro do bloco, sem empurrar a página. */
+  .bloco, .grade-medidas, .filtros { overflow-x: auto; }
+  .heatmap td { width: 26px; }
+  .tabela td, .tabela th { padding: 8px 6px; font-size: 12.5px; }
+  .topo-tela h1 { font-size: 19px; }
+}
+
 /* -- demonstração: faixa e sobreposição do relatório --------------- */
 .faixa-demo {
-  position: fixed; top: 0; right: 0; z-index: 50;
+  position: absolute; top: 0; right: 0; z-index: 50;
   background: var(--laranja); color: #17110d; font-family: var(--mono);
   font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
   padding: 4px 12px; border-bottom-left-radius: 6px; font-weight: 600;
 }
 .sobreposicao-relatorio {
-  position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.72);
-  display: grid; place-items: center; padding: 24px;
+  /* absolute + altura do documento: dentro do iframe do Artifact, `fixed`
+     ancorava na viewport da página hospedeira e a janela saía do lugar. */
+  position: absolute; left: 0; top: 0; width: 100%; z-index: 100;
+  background: rgba(0,0,0,0.82); display: grid; place-items: start center; padding: 24px;
 }
 .janela-relatorio {
-  width: min(900px, 100%); height: min(90vh, 100%);
+  width: min(900px, 100%); height: min(90vh, 720px);
   background: #fff; border-radius: 10px; overflow: hidden;
   display: flex; flex-direction: column;
 }
@@ -258,12 +304,12 @@ FAIXA_DEMO = ('<div class="faixa-demo" title="Dados de exemplo — não é captu
 TOUR_CSS = '''
 /* -- tour guiado (demonstração) ---------------------------------- */
 .tour-hi {
-  position: fixed; z-index: 200; border-radius: 8px; pointer-events: none;
+  position: absolute; z-index: 200; border-radius: 8px; pointer-events: none;
   box-shadow: 0 0 0 4px var(--laranja), 0 0 0 9999px rgba(6,8,10,0.74);
   transition: all 0.25s ease;
 }
 .tour-card {
-  position: fixed; z-index: 201; width: min(340px, calc(100vw - 32px));
+  position: absolute; z-index: 201; width: min(340px, calc(100vw - 32px));
   background: var(--superficie-alta); border: 1px solid var(--borda);
   border-radius: 12px; padding: 18px 18px 16px; box-shadow: 0 16px 50px rgba(0,0,0,0.5);
 }
@@ -277,13 +323,8 @@ TOUR_CSS = '''
 .tour-ant { background: transparent; border: 1px solid var(--borda); color: var(--texto-fraco); }
 .tour-pular { background: transparent; border: none; color: var(--texto-fraco); font-size: 12px; }
 .tour-pular:hover { color: var(--texto); }
-.tour-ajuda {
-  position: fixed; left: 18px; bottom: 18px; z-index: 120;
-  width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--borda);
-  background: var(--superficie-alta); color: var(--ambar); font-size: 18px;
-  cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-}
-.tour-ajuda:hover { border-color: var(--ambar); }
+.tour-ajuda { color: var(--ambar); font-size: 12.5px; padding: 7px 10px; }
+.tour-ajuda:hover { border-color: var(--ambar); color: var(--ambar); }
 @media (prefers-reduced-motion: reduce) { .tour-hi { transition: none; } }
 '''
 
@@ -368,13 +409,19 @@ TOUR_JS = r'''
 
   function posicionar(alvo, i) {
     limpar();
+    /* Coordenadas de DOCUMENTO, não de viewport: as camadas do tour são
+       position:absolute porque a demo roda dentro do iframe do Artifact, que se
+       redimensiona à altura do conteúdo. Com position:fixed elas escapavam por
+       cima da página hospedeira. */
+    const sx = window.pageXOffset, sy = window.pageYOffset;
     const r = alvo.getBoundingClientRect();
     const pad = 6;
+    const larguraDoc = document.documentElement.clientWidth;
     hi = document.createElement("div");
     hi.className = "tour-hi";
-    hi.style.left = Math.max(4, r.left - pad) + "px";
-    hi.style.top = Math.max(4, r.top - pad) + "px";
-    hi.style.width = Math.min(window.innerWidth - 8, r.width + pad * 2) + "px";
+    hi.style.left = Math.max(4, r.left + sx - pad) + "px";
+    hi.style.top = Math.max(4, r.top + sy - pad) + "px";
+    hi.style.width = Math.min(larguraDoc - 8, r.width + pad * 2) + "px";
     hi.style.height = (r.height + pad * 2) + "px";
     document.body.appendChild(hi);
 
@@ -391,16 +438,21 @@ TOUR_JS = r'''
        </div>`;
     document.body.appendChild(card);
 
-    // posiciona o cartão: abaixo do alvo se couber, senão acima; preso à tela.
+    /* Posiciona o cartão abaixo do alvo se couber na janela visível, senão
+       acima; e sempre dentro da largura do documento. Tudo convertido para
+       coordenadas de documento no fim. */
     const cr = card.getBoundingClientRect();
+    const alturaVisivel = window.innerHeight;
     let top = r.bottom + 12;
-    if (top + cr.height > window.innerHeight - 12) top = r.top - cr.height - 12;
-    if (top < 12) top = 12;
+    if (top + cr.height > alturaVisivel - 12) {
+      const acima = r.top - cr.height - 12;
+      top = acima >= 12 ? acima : Math.max(12, alturaVisivel - cr.height - 12);
+    }
     let left = r.left;
-    if (left + cr.width > window.innerWidth - 12) left = window.innerWidth - cr.width - 12;
+    if (left + cr.width > larguraDoc - 12) left = larguraDoc - cr.width - 12;
     if (left < 12) left = 12;
-    card.style.top = top + "px";
-    card.style.left = left + "px";
+    card.style.top = (top + sy) + "px";
+    card.style.left = (left + sx) + "px";
 
     card.querySelector(".tour-prox").onclick = () => mostrar(i + 1, 1);
     const ant = card.querySelector(".tour-ant");
@@ -424,11 +476,14 @@ TOUR_JS = r'''
     if ($("tour-ajuda")) return;
     const b = document.createElement("button");
     b.id = "tour-ajuda";
-    b.className = "tour-ajuda";
+    b.className = "tour-ajuda secundario";
     b.title = "Rever o guia";
-    b.textContent = "?";
+    b.textContent = "? Rever o guia";
     b.onclick = iniciar;
-    document.body.appendChild(b);
+    /* No rodapé da lateral, junto do "Sair": flutuando sobre o conteúdo ele
+       cobria a tabela no celular. */
+    const rodape = document.querySelector(".rodape-lateral");
+    (rodape || document.body).appendChild(b);
   }
 
   window.addEventListener("resize", () => { if (ativo) posicionar(document.querySelector(passos[idx].alvo) || document.querySelector(".marca-lateral"), idx); });

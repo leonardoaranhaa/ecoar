@@ -120,8 +120,8 @@ def main() -> int:
     cabecalho = (
         "/* Retrato dos dados da B, congelado por scripts/exportar_demo.py.\n"
         "   NÃO editar à mão: rode o script de novo para atualizar.\n"
-        "   É a resposta real de cada endpoint do backend semeado com as três\n"
-        "   cidades — a demo lê daqui no lugar da rede. */\n"
+        "   É a resposta real de cada endpoint do backend semeado com o cenário\n"
+        "   de Piracicaba — a demo lê daqui no lugar da rede. */\n"
     )
     destino.write_text(cabecalho + "window.DEMO = " + corpo + ";\n", encoding="utf-8")
 
