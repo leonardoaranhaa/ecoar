@@ -608,6 +608,16 @@ sobre segurança pública) — nunca como pitch principal fora de contexto. Nív
 3 nunca deve ser tratado como parte do ECOAR — é cross-sell de outro produto,
 com sua própria proposta e ciclo de venda.
 
+### 12.5 Prompts de construção
+
+Contagem de tráfego, cruzamento com veículos furtados/roubados, detecção de
+acidente/colisão e detecção de disparo de arma de fogo já têm prompt preparado
+em `docs/projeto/prompts-claude-code.md` (Prompts 13-16). Os dois primeiros são
+prompts de construção; os dois últimos são deliberadamente estudos de
+viabilidade, não construção — nenhum dos dois tem especificação técnica
+validada ainda, e o de disparo de arma muda quem é o comprador do produto (ver
+seção 12.2).
+
 ---
 
 ## 13. PRÓXIMO PASSO TÉCNICO IMEDIATO
