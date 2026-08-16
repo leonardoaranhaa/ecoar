@@ -121,3 +121,56 @@ Furto e violação de gabinete são ocorrência operacional, não evento de
 fiscalização. Trafegam em endpoint próprio, com prioridade máxima na fila de
 uplink (à frente de qualquer pacote acústico pendente) e aparecem em tela
 separada no dashboard.
+
+## D15 — Contagem de tráfego é dado operacional, sem placa, sem fila de revisão
+
+`edge/traffic_counter` reaproveita a câmera já instalada, mas roda em
+paralelo ao pipeline acústico — amostra em cadência fixa, não por evento de
+som. Não lê placa (isso continua sendo só `vision/plate_ocr`, D10) e não
+guarda quadro a quadro: o que sai do nó é contagem agregada por dia/hora/tipo
+de veículo (`backend.registrar_trafego`, upsert que soma, nunca substitui).
+
+Não passa pela fila de revisão (D2 não se aplica: não há decisão de infração
+para validar) nem entra na priorização de fiscalização de ruído — é dado de
+planejamento de mobilidade, em `GET /v1/trafego`, canal e tabela próprios
+(`trafego_agregado`).
+
+Desligado por padrão (`trafego.habilitado: false`). O classificador de tipo de
+veículo é simulado (D11) até um modelo pré-treinado real ser integrado —
+diferente do classificador acústico de escapamento, aqui existe modelo público
+disponível, então o próximo passo é integração, não treino do zero.
+
+## D16 — Detecção de disparo de arma de fogo é protótipo conceitual, não capacidade validada
+
+`edge/gunshot_detection` implementa só um detector de transiente: um pico de
+energia muito acima do piso de ruído local da janela — DSP estabelecido, sem
+depender de dataset. Ele **não** discrimina disparo de outros transientes
+urbanos (rojão, escapamento estourando, porta batendo), e essa discriminação
+não está validada nem tem dataset de treino disponível. Localização precisa
+exigiria multilateração entre nós (sistema novo, não extensão de
+`edge/localization`) e sincronismo de relógio de precisão que o nó não tem
+hoje (usa NTP comum).
+
+Por isso:
+
+- A saída nunca se chama "disparo": é sempre
+  `candidato_transiente_nao_classificado`, com um campo `aviso` explícito em
+  todo resultado e evento de auditoria (`ALERTA_DISPARO_CONCEITO` — o próprio
+  nome da constante carrega "não validado").
+- `disparo.habilitado` nasce `false` — liga só por decisão explícita.
+- Canal separado (D14) tanto dos eventos acústicos quanto de violação
+  patrimonial: `POST /v1/alertas-disparo-conceito`, tabela
+  `alertas_disparo_conceito`.
+- `DetectorTransiente` não está integrado ao orquestrador do nó
+  (`edge/no.py`) — ligar isso ao laço principal faria parecer que a cadeia de
+  ponta a ponta está pronta, quando só o primeiro passo existe.
+- No dashboard, a tela carrega o rótulo "CONCEITO — NÃO VALIDADO" e só
+  aparece mediante acionamento explícito (toggle em Configurações, admin),
+  nunca visível por padrão.
+
+Ver `docs/projeto/prompts-claude-code.md` Prompt 16 (estudo de viabilidade) e
+`docs/projeto/manual-tecnico.md` seção 12.2 antes de tratar isso como
+capacidade real em qualquer conversa comercial. Prometer detecção de disparo
+sem essa base seria o mesmo erro que o projeto se recusa a cometer com
+autuação automática de ruído (`CLAUDE.md`, regra de comunicação 1) — e aqui o
+custo de errar é maior: uma resposta policial real, não uma multa.

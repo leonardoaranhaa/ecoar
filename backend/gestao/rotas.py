@@ -86,6 +86,24 @@ def criar_rotas(config: ConfigBackend, conexao) -> APIRouter:
             ),
         }
 
+    @rotas.get("/trafego")
+    def trafego(identidade: Identidade = Depends(operador_autenticado)):
+        """Contagem e classificação de tráfego (roadmap modular).
+
+        Dado operacional de mobilidade, sem placa (D10) e sem passar pela fila
+        de revisão (D2 não se aplica: não há decisão de infração aqui).
+        """
+        return {
+            "por_tipo": db.trafego_por_tipo(conexao),
+            "por_hora": db.trafego_hora_dia(conexao),
+            "por_no": db.trafego_por_no(conexao),
+            "observacao": (
+                "Contagem aproximada de tráfego por tipo de veículo, reaproveitando "
+                "a câmera já instalada. Dado de planejamento de mobilidade — não gera "
+                "autuação nem entra na priorização de fiscalização de ruído."
+            ),
+        }
+
     @rotas.get("/priorizacao/relatorio", response_class=Response)
     def relatorio(identidade: Identidade = Depends(operador_autenticado)):
         """Relatório de priorização em HTML pronto para imprimir em PDF.

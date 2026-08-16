@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from backend import db
 from backend.armazenamento import Armazenamento
 from backend.audit_log import (
+    ALERTA_DISPARO_CONCEITO,
     ALERTA_VIOLACAO,
     EVENTO_RECEBIDO,
     EVENTO_REJEITADO,
@@ -57,6 +58,29 @@ class AlertaViolacao(BaseModel):
     detalhe: dict = Field(default_factory=dict)
     imagem: str | None = None
     canal: str | None = None
+
+
+class AgregadoTrafego(BaseModel):
+    dia: str
+    hora: int = Field(ge=0, le=23)
+    tipo: str
+    contagem: int = Field(ge=1)
+
+
+class PacoteTrafego(BaseModel):
+    agregados: list[AgregadoTrafego] = Field(default_factory=list)
+
+
+class AlertaDisparoConceito(BaseModel):
+    """Candidato de transiente do protótipo conceitual (edge/gunshot_detection).
+
+    NUNCA "disparo confirmado" — ver docs/DECISIONS.md D16. O nome do modelo
+    já carrega o aviso.
+    """
+
+    pico_relativo_db: float
+    instante_relativo_s: float
+    ocorrido_em: str | None = None
 
 
 def criar_rotas(
@@ -246,6 +270,50 @@ def criar_rotas(
                 json.dumps(dados.detalhe, ensure_ascii=False),
             )
         return {"status": "ok"}
+
+    @rotas.post("/trafego", status_code=status.HTTP_202_ACCEPTED)
+    def receber_trafego(dados: PacoteTrafego, no_id: str = Depends(no_autenticado)):
+        """Contagem de tráfego (roadmap modular). Dado operacional agregado,
+        sem placa e sem fila de revisão — não é evidência de infração."""
+        with db.transacao(conexao):
+            db.registrar_no(conexao, no_id=no_id)
+            for agregado in dados.agregados:
+                db.registrar_trafego(
+                    conexao, no_id, agregado.dia, agregado.hora, agregado.tipo, agregado.contagem
+                )
+        return {"status": "ok", "recebidos": len(dados.agregados)}
+
+    @rotas.post("/alertas-disparo-conceito", status_code=status.HTTP_201_CREATED)
+    def receber_alerta_disparo(
+        dados: AlertaDisparoConceito, no_id: str = Depends(no_autenticado)
+    ):
+        """Canal separado (D14) do de eventos acústicos E do de violação
+        patrimonial: candidato de transiente do protótipo conceitual de
+        disparo (edge/gunshot_detection). NUNCA confirmação — ver D16."""
+        with db.transacao(conexao):
+            db.registrar_no(conexao, no_id=no_id)
+            identificador = db.registrar_alerta_disparo(
+                conexao,
+                no_id,
+                dados.pico_relativo_db,
+                dados.instante_relativo_s,
+                dados.ocorrido_em or _agora_iso(),
+            )
+            trilha.registrar(
+                ALERTA_DISPARO_CONCEITO,
+                ator=no_id,
+                detalhe={
+                    "pico_relativo_db": dados.pico_relativo_db,
+                    "validado": False,
+                },
+            )
+        log.warning(
+            "candidato a transiente não classificado no nó %s (%.1f dB acima do piso) "
+            "— protótipo conceitual, NÃO é confirmação de disparo",
+            no_id,
+            dados.pico_relativo_db,
+        )
+        return {"status": "registrado", "id": identificador, "validado": False}
 
     return rotas
 

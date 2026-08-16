@@ -6,6 +6,7 @@
    perdeu a sessão. É um terminal compartilhado de repartição. */
 
 const ARMAZEM = "ecoar.token";
+const ARMAZEM_RECURSOS = "ecoar.recursos-adicionais";
 const estado = {
   token: null,
   eu: null,
@@ -14,12 +15,19 @@ const estado = {
   selecionado: null,
   filtroHistorico: "",
   blobs: [],
+  /* Roadmap modular (docs/projeto/manual-tecnico.md seção 12) — desligado por
+     padrão, ligado mediante acionamento explícito em Configurações. Nunca
+     persiste além da sessão (mesmo modelo de ameaça do token: terminal
+     compartilhado de repartição). */
+  recursosAdicionais: { trafego: false, disparo: false },
 };
 
 const $ = (id) => document.getElementById(id);
 
 /* Telas. `admin: true` só aparece para o perfil admin (RBAC no cliente; o
-   backend recusa de novo, que é onde a garantia mora). */
+   backend recusa de novo, que é onde a garantia mora). `recurso: "x"` só
+   aparece se estado.recursosAdicionais.x estiver ligado — feature do roadmap
+   modular, mediante acionamento (nunca visível por padrão). */
 const TELAS = [
   { id: "priorizacao", nome: "Priorização", render: telaPriorizacao },
   { id: "revisao", nome: "Fila de revisão", render: telaRevisao, badge: "pendente_revisao" },
@@ -29,6 +37,11 @@ const TELAS = [
   { id: "metricas", nome: "Métricas", render: telaMetricas },
   { id: "modelo", nome: "Modelo", render: telaModelo, admin: true },
   { id: "auditoria", nome: "Auditoria", render: telaAuditoria, admin: true },
+  { id: "trafego", nome: "Tráfego", render: telaTrafego, admin: true, recurso: "trafego" },
+  {
+    id: "disparo", nome: "Disparo de arma (conceito)", render: telaDisparo,
+    admin: true, recurso: "disparo", classeNav: "so-conceito",
+  },
   { id: "config", nome: "Configurações", render: telaConfig },
 ];
 
@@ -95,17 +108,35 @@ $("form-acesso").addEventListener("submit", async (evento) => {
 
 function sair() {
   sessionStorage.removeItem(ARMAZEM);
+  sessionStorage.removeItem(ARMAZEM_RECURSOS);
   estado.token = null;
   estado.eu = null;
+  estado.recursosAdicionais = { trafego: false, disparo: false };
   $("painel").hidden = true;
   $("acesso").hidden = false;
 }
 $("sair").addEventListener("click", sair);
 
+function carregarRecursosAdicionais() {
+  try {
+    const salvo = JSON.parse(sessionStorage.getItem(ARMAZEM_RECURSOS) || "{}");
+    estado.recursosAdicionais = { ...estado.recursosAdicionais, ...salvo };
+  } catch {
+    /* valor salvo corrompido — mantém o padrão desligado */
+  }
+}
+
+function alternarRecursoAdicional(chave, ligado) {
+  estado.recursosAdicionais[chave] = ligado;
+  sessionStorage.setItem(ARMAZEM_RECURSOS, JSON.stringify(estado.recursosAdicionais));
+  desenharNavegacao();
+}
+
 function abrirPainel() {
   $("acesso").hidden = true;
   $("painel").hidden = false;
   $("quem").textContent = `${estado.eu.nome} · ${estado.eu.perfil}`;
+  carregarRecursosAdicionais();
   desenharNavegacao();
   irPara("priorizacao");
 }
@@ -113,13 +144,17 @@ function abrirPainel() {
 /* -- navegação ---------------------------------------------------- */
 
 function telasVisiveis() {
-  return TELAS.filter((tela) => !tela.admin || estado.eu.admin);
+  return TELAS.filter(
+    (tela) =>
+      (!tela.admin || estado.eu.admin) &&
+      (!tela.recurso || estado.recursosAdicionais[tela.recurso])
+  );
 }
 
 function desenharNavegacao() {
   $("navegacao").innerHTML = telasVisiveis()
     .map(
-      (tela) => `<button class="item-nav ${tela.admin ? "so-admin" : ""}" data-tela="${tela.id}">
+      (tela) => `<button class="item-nav ${tela.admin ? "so-admin" : ""} ${tela.classeNav || ""}" data-tela="${tela.id}">
         <span>${tela.nome}</span>
         ${tela.badge ? `<span class="contagem" data-badge="${tela.badge}" hidden></span>` : ""}
       </button>`
@@ -579,7 +614,100 @@ async function telaConfig() {
       (<span class="hash">config/no-*.yaml</span>), não neste painel. São por nó
       porque uma via de tráfego pesado tem piso de ruído diferente de uma rua
       residencial — e mudá-las remotamente sem registro quebraria a
-      reprodutibilidade da decisão.</p></div>`;
+      reprodutibilidade da decisão.</p></div>
+
+    ${estado.eu.admin ? `
+    <div class="bloco"><h3>Recursos adicionais (roadmap modular)</h3>
+      <p class="dica">Desligados por padrão. Ligar aqui é a única forma de
+      fazer esses recursos aparecerem no menu — mediante acionamento, conforme
+      a conversa abrir espaço (<span class="hash">docs/projeto/manual-tecnico.md</span>
+      seção 12.4).</p>
+      <div class="toggle-linha">
+        <label class="toggle">
+          <input type="checkbox" id="toggle-trafego" ${estado.recursosAdicionais.trafego ? "checked" : ""}>
+          <span>Tráfego — contagem e classificação por tipo de veículo</span>
+        </label>
+      </div>
+      <div class="toggle-linha">
+        <label class="toggle">
+          <input type="checkbox" id="toggle-disparo" ${estado.recursosAdicionais.disparo ? "checked" : ""}>
+          <span>Disparo de arma de fogo — <strong>protótipo conceitual, não validado</strong></span>
+        </label>
+      </div>
+    </div>` : ""}`;
+
+  $("toggle-trafego")?.addEventListener("change", (e) =>
+    alternarRecursoAdicional("trafego", e.target.checked));
+  $("toggle-disparo")?.addEventListener("change", (e) =>
+    alternarRecursoAdicional("disparo", e.target.checked));
+}
+
+/* -- tela: tráfego (roadmap modular, Nível 1) ---------------------- */
+
+const ROTULOS_TIPO_VEICULO = { moto: "Motos", carro: "Carros", onibus: "Ônibus", caminhao: "Caminhões" };
+
+async function telaTrafego() {
+  const dados = await api("/v1/trafego");
+  const porHora = {};
+  dados.por_hora.forEach((h) => { porHora[h.hora] = h.total; });
+  const maxHora = Math.max(...Object.values(porHora), 1);
+  const barras = Array.from({ length: 24 }, (_, hora) => {
+    const total = porHora[hora] || 0;
+    return `<div class="barra-dia" title="${hora}h: ${total}">
+      <div class="seg-conf" style="height:${(total / maxHora) * 132}px"></div></div>`;
+  }).join("");
+  const rotulosHora = Array.from({ length: 24 }, (_, h) => `<span>${String(h).padStart(2, "0")}h</span>`).join("");
+
+  const cartoesTipo = dados.por_tipo.length
+    ? dados.por_tipo.map((t) => cartao("", t.total, ROTULOS_TIPO_VEICULO[t.tipo] || t.tipo)).join("")
+    : "";
+
+  const linhasNo = dados.por_no.length
+    ? dados.por_no.map((n) => `<tr><td>${texto(n.no_id)}</td><td class="num">${n.total}</td></tr>`).join("")
+    : `<tr><td colspan="2" class="vazio">Nenhum nó reportou tráfego ainda.</td></tr>`;
+
+  $("conteudo").innerHTML = `
+    <div class="topo-tela"><div><h1>Tráfego</h1>
+      <div class="sub">Contagem e classificação por tipo de veículo — dado de planejamento de mobilidade</div></div></div>
+    <div class="aviso-tela">${texto(dados.observacao)}</div>
+    ${cartoesTipo ? `<div class="grade-cartoes">${cartoesTipo}</div>` : `<p class="vazio">Sem dado de tráfego ainda.</p>`}
+    <div class="bloco"><h3>Volume por hora do dia</h3>
+      <div class="barras">${barras}</div><div class="barra-rotulos">${rotulosHora}</div></div>
+    <div class="bloco"><h3>Por nó</h3>
+      <table class="tabela"><tr><th>Nó</th><th class="num">Veículos</th></tr>${linhasNo}</table></div>`;
+}
+
+/* -- tela: disparo de arma (roadmap modular, PROTÓTIPO CONCEITUAL) -- */
+
+async function telaDisparo() {
+  const dados = await api("/v1/alertas-disparo-conceito");
+  const linhas = dados.alertas.length
+    ? dados.alertas.map((a) => `<tr>
+        <td>${quando(a.recebido_em)}</td>
+        <td>${texto(a.no_id)}</td>
+        <td class="num">${numero(a.pico_relativo_db, 1)} dB acima do piso</td>
+        <td>${a.atendido ? "atendido" : `<button class="secundario" data-atender-disparo="${a.id}">Marcar atendido</button>`}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="4" class="vazio">Nenhum candidato registrado.</td></tr>`;
+
+  $("conteudo").innerHTML = `
+    <div class="topo-tela"><div>
+      <h1>Disparo de arma de fogo <span class="etiqueta rejeitado">CONCEITO — NÃO VALIDADO</span></h1>
+      <div class="sub">Protótipo conceitual — candidato de transiente, nunca confirmação</div></div></div>
+    <div class="mensagem falha">${texto(dados.aviso)}</div>
+    <div class="aviso-tela">Este módulo detecta um pico de energia acima do piso local, nada
+      além disso. Ele NÃO discrimina disparo de outros transientes urbanos (rojão, escapamento
+      estourando, porta batendo) — não há dataset de treino nem validação de campo. Ver
+      <span class="hash">docs/DECISIONS.md</span> D16 antes de tratar isso como capacidade
+      pronta em qualquer conversa com cliente.</div>
+    <table class="tabela"><tr><th>Quando</th><th>Nó</th><th class="num">Pico</th><th></th></tr>${linhas}</table>`;
+
+  $("conteudo").querySelectorAll("[data-atender-disparo]").forEach((botao) => {
+    botao.addEventListener("click", async () => {
+      await api(`/v1/alertas-disparo-conceito/${botao.dataset.atenderDisparo}/atender`, { method: "POST" });
+      telaDisparo();
+    });
+  });
 }
 
 /* -- utilidades --------------------------------------------------- */

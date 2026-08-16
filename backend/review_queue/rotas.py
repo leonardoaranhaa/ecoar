@@ -262,6 +262,48 @@ def criar_rotas(
             )
         return {"status": "atendido", "id": violacao_id}
 
+    @rotas.get("/alertas-disparo-conceito")
+    def alertas_disparo(
+        apenas_pendentes: bool = False,
+        identidade: Identidade = Depends(operador_autenticado),
+    ):
+        """Canal separado (D14): candidato de transiente do protótipo
+        conceitual de disparo (edge/gunshot_detection). NUNCA "disparo
+        confirmado" — ver docs/DECISIONS.md D16."""
+        linhas = db.listar_alertas_disparo(conexao, apenas_pendentes=apenas_pendentes)
+        return {
+            "alertas": [
+                {
+                    "id": linha["id"],
+                    "no_id": linha["no_id"],
+                    "pico_relativo_db": linha["pico_relativo_db"],
+                    "instante_relativo_s": linha["instante_relativo_s"],
+                    "ocorrido_em": linha["ocorrido_em"],
+                    "recebido_em": linha["recebido_em"],
+                    "atendido": bool(linha["atendido"]),
+                    "validado": False,
+                }
+                for linha in linhas
+            ],
+            "aviso": (
+                "protótipo conceitual — não há validação de que o detector "
+                "discrimina disparo de arma de fogo de outros transientes urbanos. "
+                "Ver docs/DECISIONS.md D16."
+            ),
+        }
+
+    @rotas.post("/alertas-disparo-conceito/{alerta_id}/atender")
+    def atender_disparo(
+        alerta_id: int, identidade: Identidade = Depends(operador_autenticado)
+    ):
+        with db.transacao(conexao):
+            encontrado = db.atender_alerta_disparo(conexao, alerta_id)
+        if not encontrado:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="alerta não encontrado"
+            )
+        return {"status": "atendido", "id": alerta_id}
+
     @rotas.get("/nos")
     def nos(identidade: Identidade = Depends(operador_autenticado)):
         return {

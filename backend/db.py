@@ -139,6 +139,44 @@ MIGRACOES: list[tuple[int, str]] = [
         CREATE INDEX idx_violacoes_atendido ON violacoes(atendido);
         """,
     ),
+    (
+        3,
+        # Roadmap modular (docs/projeto/manual-tecnico.md seção 12). Dado
+        # operacional de mobilidade, sem placa, sem fila de revisão (D2 não se
+        # aplica: não há decisão de infração para validar).
+        """
+        CREATE TABLE trafego_agregado (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            no_id       TEXT NOT NULL,
+            dia         TEXT NOT NULL,
+            hora        INTEGER NOT NULL,
+            tipo        TEXT NOT NULL,
+            contagem    INTEGER NOT NULL,
+            recebido_em TEXT NOT NULL,
+            UNIQUE(no_id, dia, hora, tipo)
+        );
+        CREATE INDEX idx_trafego_dia_hora ON trafego_agregado(dia, hora);
+        """,
+    ),
+    (
+        4,
+        # Canal separado (D14) do de violação patrimonial E dos eventos
+        # acústicos: candidato de transiente do protótipo conceitual de
+        # disparo (edge/gunshot_detection, D16) — nunca "disparo confirmado".
+        """
+        CREATE TABLE alertas_disparo_conceito (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            no_id                TEXT NOT NULL,
+            pico_relativo_db     REAL NOT NULL,
+            instante_relativo_s  REAL NOT NULL,
+            ocorrido_em          TEXT NOT NULL,
+            recebido_em          TEXT NOT NULL,
+            atendido             INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX idx_disparo_no ON alertas_disparo_conceito(no_id, recebido_em);
+        CREATE INDEX idx_disparo_atendido ON alertas_disparo_conceito(atendido);
+        """,
+    ),
 ]
 
 
@@ -445,6 +483,124 @@ def listar_violacoes(
 
 def atender_violacao(conexao: sqlite3.Connection, violacao_id: int) -> bool:
     cursor = conexao.execute("UPDATE violacoes SET atendido = 1 WHERE id = ?", (violacao_id,))
+    return cursor.rowcount > 0
+
+
+# -- tráfego (roadmap modular, dado operacional sem placa) --------------
+
+
+def registrar_trafego(
+    conexao: sqlite3.Connection,
+    no_id: str,
+    dia: str,
+    hora: int,
+    tipo: str,
+    contagem: int,
+) -> None:
+    """Soma no agregado existente da hora/tipo, não substitui.
+
+    O nó drena e envia o que acumulou a cada `trafego.cadencia_s` — o mesmo
+    balde de hora pode receber vários envios ao longo da hora corrente.
+    """
+    conexao.execute(
+        """
+        INSERT INTO trafego_agregado (no_id, dia, hora, tipo, contagem, recebido_em)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(no_id, dia, hora, tipo) DO UPDATE SET
+            contagem = trafego_agregado.contagem + excluded.contagem,
+            recebido_em = datetime('now')
+        """,
+        (no_id, dia, hora, tipo, contagem),
+    )
+
+
+def trafego_por_tipo(conexao: sqlite3.Connection, dias: int = 30) -> list[dict]:
+    return [
+        dict(linha)
+        for linha in conexao.execute(
+            """
+            SELECT tipo, SUM(contagem) AS total
+              FROM trafego_agregado
+             WHERE dia >= date('now', ?)
+             GROUP BY tipo
+             ORDER BY total DESC
+            """,
+            (f"-{dias} days",),
+        )
+    ]
+
+
+def trafego_hora_dia(conexao: sqlite3.Connection, dias: int = 30) -> list[dict]:
+    """Volume por hora do dia, somado entre todos os dias/tipos — para o
+    mesmo formato de mapa de calor da priorização de ruído."""
+    return [
+        dict(linha)
+        for linha in conexao.execute(
+            """
+            SELECT hora, SUM(contagem) AS total
+              FROM trafego_agregado
+             WHERE dia >= date('now', ?)
+             GROUP BY hora
+             ORDER BY hora
+            """,
+            (f"-{dias} days",),
+        )
+    ]
+
+
+def trafego_por_no(conexao: sqlite3.Connection, dias: int = 30) -> list[dict]:
+    return [
+        dict(linha)
+        for linha in conexao.execute(
+            """
+            SELECT no_id, SUM(contagem) AS total
+              FROM trafego_agregado
+             WHERE dia >= date('now', ?)
+             GROUP BY no_id
+             ORDER BY total DESC
+            """,
+            (f"-{dias} days",),
+        )
+    ]
+
+
+# -- disparo (protótipo conceitual, D16 — não validado) ------------------
+
+
+def registrar_alerta_disparo(
+    conexao: sqlite3.Connection,
+    no_id: str,
+    pico_relativo_db: float,
+    instante_relativo_s: float,
+    ocorrido_em: str,
+) -> int:
+    cursor = conexao.execute(
+        """
+        INSERT INTO alertas_disparo_conceito
+            (no_id, pico_relativo_db, instante_relativo_s, ocorrido_em, recebido_em)
+        VALUES (?, ?, ?, ?, datetime('now'))
+        """,
+        (no_id, pico_relativo_db, instante_relativo_s, ocorrido_em),
+    )
+    return int(cursor.lastrowid)
+
+
+def listar_alertas_disparo(
+    conexao: sqlite3.Connection, apenas_pendentes: bool = False, limite: int = 100
+) -> list[sqlite3.Row]:
+    onde = "WHERE atendido = 0" if apenas_pendentes else ""
+    return list(
+        conexao.execute(
+            f"SELECT * FROM alertas_disparo_conceito {onde} ORDER BY recebido_em DESC LIMIT ?",
+            (limite,),
+        )
+    )
+
+
+def atender_alerta_disparo(conexao: sqlite3.Connection, alerta_id: int) -> bool:
+    cursor = conexao.execute(
+        "UPDATE alertas_disparo_conceito SET atendido = 1 WHERE id = ?", (alerta_id,)
+    )
     return cursor.rowcount > 0
 
 

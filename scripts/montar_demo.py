@@ -83,6 +83,11 @@ function _atender(id) {
   if (v) v.atendido = true;
   return { status: "atendido", id: Number(id) };
 }
+function _atenderDisparo(id) {
+  const a = D.alertas_disparo.alertas.find((x) => String(x.id) === String(id));
+  if (a) a.atendido = true;
+  return { status: "atendido", id: Number(id) };
+}
 async function api(caminho, opcoes = {}) {
   await new Promise((r) => setTimeout(r, 45)); // leve latência: parece a rede real
   const metodo = (opcoes.method || "GET").toUpperCase();
@@ -100,12 +105,16 @@ async function api(caminho, opcoes = {}) {
     case "/v1/auditoria/verificar": return D.auditoria_verif;
     case "/v1/auditoria": return D.auditoria;
     case "/v1/eventos": return _listarEventos(p);
+    case "/v1/trafego": return D.trafego;
+    case "/v1/alertas-disparo-conceito": return D.alertas_disparo;
   }
   if ((m = caminhoBase.match(/^\\/v1\\/eventos\\/(\\d+)$/))) return D.detalhes[m[1]];
   if ((m = caminhoBase.match(/^\\/v1\\/eventos\\/(\\d+)\\/revisao$/)) && metodo === "POST")
     return _revisar(m[1], JSON.parse(opcoes.body || "{}"));
   if ((m = caminhoBase.match(/^\\/v1\\/violacoes\\/(\\d+)\\/atender$/)) && metodo === "POST")
     return _atender(m[1]);
+  if ((m = caminhoBase.match(/^\\/v1\\/alertas-disparo-conceito\\/(\\d+)\\/atender$/)) && metodo === "POST")
+    return _atenderDisparo(m[1]);
   throw new Error("rota de demonstração desconhecida: " + caminhoBase);
 }'''
 
