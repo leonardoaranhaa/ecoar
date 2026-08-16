@@ -600,26 +600,11 @@ async function telaConfig() {
     <div class="topo-tela"><div><h1>Configurações</h1>
       <div class="sub">Limiares e calibração vivem na configuração de cada nó</div></div></div>
 
-    <div class="bloco"><h3>Modo de operação por nó</h3>
-      <table class="tabela"><tr><th>Nó</th><th>Modo</th></tr>${linhas}</table></div>
-
-    <div class="aviso-tela">
-      <strong>Modo de autuação: ${modos.autuacao_liberada ? "liberado" : "bloqueado"}.</strong><br>
-      ${texto(modos.motivo_autuacao_bloqueada)}
-    </div>
-
-    <div class="bloco"><h3>Onde ficam as demais configurações</h3>
-      <p class="dica">Limiar de confiança, calibração de SPL por sensor, política de
-      retenção e geometria do array vivem na configuração de cada nó
-      (<span class="hash">config/no-*.yaml</span>), não neste painel. São por nó
-      porque uma via de tráfego pesado tem piso de ruído diferente de uma rua
-      residencial — e mudá-las remotamente sem registro quebraria a
-      reprodutibilidade da decisão.</p></div>
-
     ${estado.eu.admin ? `
-    <div class="bloco"><h3>Recursos adicionais (roadmap modular)</h3>
-      <p class="dica">Desligados por padrão. Ligar aqui é a única forma de
-      fazer esses recursos aparecerem no menu — mediante acionamento, conforme
+    <div class="bloco-recursos">
+      <h3>🧩 Recursos adicionais (roadmap modular)</h3>
+      <p class="dica">Desligados por padrão. Ligar aqui é a única forma de fazer
+      esses recursos aparecerem no menu lateral — mediante acionamento, conforme
       a conversa abrir espaço (<span class="hash">docs/projeto/manual-tecnico.md</span>
       seção 12.4).</p>
       <div class="toggle-linha">
@@ -634,7 +619,23 @@ async function telaConfig() {
           <span>Disparo de arma de fogo — <strong>protótipo conceitual, não validado</strong></span>
         </label>
       </div>
-    </div>` : ""}`;
+    </div>` : ""}
+
+    <div class="bloco"><h3>Modo de operação por nó</h3>
+      <table class="tabela"><tr><th>Nó</th><th>Modo</th></tr>${linhas}</table></div>
+
+    <div class="aviso-tela">
+      <strong>Modo de autuação: ${modos.autuacao_liberada ? "liberado" : "bloqueado"}.</strong><br>
+      ${texto(modos.motivo_autuacao_bloqueada)}
+    </div>
+
+    <div class="bloco"><h3>Onde ficam as demais configurações</h3>
+      <p class="dica">Limiar de confiança, calibração de SPL por sensor, política de
+      retenção e geometria do array vivem na configuração de cada nó
+      (<span class="hash">config/no-*.yaml</span>), não neste painel. São por nó
+      porque uma via de tráfego pesado tem piso de ruído diferente de uma rua
+      residencial — e mudá-las remotamente sem registro quebraria a
+      reprodutibilidade da decisão.</p></div>`;
 
   $("toggle-trafego")?.addEventListener("change", (e) =>
     alternarRecursoAdicional("trafego", e.target.checked));
