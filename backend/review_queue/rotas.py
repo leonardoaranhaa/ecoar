@@ -119,9 +119,9 @@ def criar_rotas(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "este evento foi capturado em modo=triagem: ele alimenta "
-                    "priorização de fiscalização e não pode virar autuação. "
-                    "Ver docs/legal/inmetro.md"
+                    "Este evento foi capturado em modo de triagem. Ele alimenta a "
+                    "priorização da fiscalização e não pode ser convertido em "
+                    "autuação."
                 ),
             )
 
@@ -286,9 +286,8 @@ def criar_rotas(
                 for linha in linhas
             ],
             "aviso": (
-                "protótipo conceitual — não há validação de que o detector "
-                "discrimina disparo de arma de fogo de outros transientes urbanos. "
-                "Ver docs/DECISIONS.md D16."
+                "Módulo em desenvolvimento. A detecção identifica picos sonoros "
+                "acima do ruído de fundo, sem distinguir a origem do som."
             ),
         }
 

@@ -120,9 +120,9 @@ a { color: var(--azul); }
   border-radius: 10px; padding: 1px 8px; color: var(--ambar);
 }
 .item-nav.so-admin::after { content: "admin"; font-size: 9px; color: var(--texto-fraco); letter-spacing: 0.05em; }
-/* Prioridade visual sobre o selo "admin": este recurso não é só restrito a
-   admin, é um protótipo não validado — precisa ficar claro no próprio menu. */
-.item-nav.so-conceito::after { content: "conceito"; font-size: 9px; color: var(--vermelho); letter-spacing: 0.05em; }
+/* Módulo ainda não operacional: o selo no menu evita que alguém o confunda
+   com uma tela em produção. */
+.item-nav.so-beta::after { content: "beta"; font-size: 9px; color: var(--ambar); letter-spacing: 0.05em; }
 
 .rodape-lateral {
   padding: 14px 20px; border-top: 1px solid var(--borda);

@@ -62,7 +62,10 @@ def test_operador_le_alertas_com_aviso_de_nao_validado(ambiente):
     assert len(corpo["alertas"]) == 1
     assert corpo["alertas"][0]["pico_relativo_db"] == pytest.approx(52.3)
     assert corpo["alertas"][0]["validado"] is False
-    assert "não há validação" in corpo["aviso"]
+    # O aviso precisa dizer que o módulo não está operacional, em linguagem de
+    # produto — sem referência a documento interno.
+    assert "em desenvolvimento" in corpo["aviso"].lower()
+    assert "docs/" not in corpo["aviso"]
 
 
 def test_atender_muda_status(ambiente):

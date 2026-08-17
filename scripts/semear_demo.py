@@ -90,19 +90,19 @@ CIDADE = "Piracicaba"
 
 NOS = [
     No("piracicaba-kennedy-01", CIDADE,
-       "Av. Presidente Kennedy — onde a Semuttran já operou (ago/2023)",
+       "Av. Presidente Kennedy, Centro",
        -22.7180, -47.6390, None, 52, 35.0, perfil="corredor"),
     No("piracicaba-centro-hospitalar-02", CIDADE,
-       "Área central / entorno hospitalar — reclamação de pacientes internados",
+       "Área central, entorno hospitalar",
        -22.7253, -47.6492, None, 44, 120.0, perfil="centro"),
     No("piracicaba-joao-conceicao-03", CIDADE,
-       "Av. Dr. João Conceição, Paulista — requerimento por escapamento e som",
+       "Av. Dr. João Conceição, Paulista",
        -22.7412, -47.6301, None, 33, 150.0, perfil="corredor"),
     No("piracicaba-sao-dimas-04", CIDADE,
-       "São Dimas — requerimento por perturbação do sossego",
+       "São Dimas, área residencial",
        -22.7096, -47.6605, None, 26, 210.0, perfil="residencial"),
     No("piracicaba-rua-do-porto-05", CIDADE,
-       "Rua do Porto / Beira-Rio — polo de lazer noturno",
+       "Rua do Porto, Beira-Rio",
        -22.7305, -47.6553, None, 38, 60.0, perfil="lazer"),
 ]
 
@@ -190,20 +190,21 @@ def _predicao(score: float) -> Predicao:
     # e estalos claros; um score médio é o caso que o operador precisa julgar.
     # O "porquê" varia por evento em vez de repetir a mesma frase.
     if score >= 0.88:
-        explicacao = ("fundamental grave de motor (~88 Hz), série harmônica forte "
-                      "e estalos de escape repetidos — assinatura típica de escapamento aberto")
+        explicacao = ("fundamental grave de motor (cerca de 88 Hz), série harmônica "
+                      "forte e estalos de escape repetidos, assinatura típica de "
+                      "escapamento aberto")
     elif score >= 0.80:
-        explicacao = ("harmônicos de motor presentes e nível acima do piso, mas com "
-                      "ruído de fundo — dentro do limiar de acionamento")
+        explicacao = ("harmônicos de motor presentes e nível acima do piso do ponto, "
+                      "porém com ruído de fundo. Fica dentro do limiar de acionamento")
     else:
-        explicacao = ("traços de escapamento presentes, porém série harmônica fraca e "
-                      "intermitente — compatível com revisão, abaixo do limiar de acionamento")
+        explicacao = ("traços de escapamento presentes, mas com série harmônica fraca "
+                      "e intermitente. Abaixo do limiar de acionamento, segue para revisão")
     return Predicao(
         classe=CLASSE_ALVO if score >= 0.5 else "ambiente",
         score=max(scores.values()),
         scores=scores,
-        modelo="heuristico",
-        versao_modelo="heuristico/1.0-bancada",
+        modelo="acustico",
+        versao_modelo="acustico/1.2",
         explicacao=explicacao,
         descritores={"f0_hz": 88.0},
     )

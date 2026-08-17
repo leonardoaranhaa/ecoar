@@ -219,17 +219,13 @@ if (salvo) {
   api("/v1/eu").then((eu) => { estado.eu = eu; abrirPainel(); }).catch(() => sair());
 }'''
 
-INIT_DEMO = '''/* DEMONSTRAÇÃO: pré-preenche o token e explica que qualquer valor entra. */
+INIT_DEMO = '''/* DEMONSTRAÇÃO: pré-preenche o token, já que não há servidor para validar. */
 $("token").value = "admin-studio-cerne";
 $("token").type = "text";
 const dica = document.createElement("p");
 dica.className = "rodape-acesso";
-dica.innerHTML = "<strong>Demonstração — cenário de Piracicaba.</strong> " +
-  "Cinco pontos escolhidos a partir de documentos públicos do município " +
-  "(operação da Semuttran, requerimentos da Câmara). Os volumes são " +
-  "construídos para a demonstração, <em>não</em> são medição de campo.<br><br>" +
-  "Qualquer token entra. Use um token com <em>operador</em> para ver o painel " +
-  "sem as telas de admin (Modelo e Auditoria).";
+dica.innerHTML = "<strong>Ambiente de demonstração.</strong> Cinco pontos de " +
+  "Piracicaba, com dados ilustrativos para apresentação do sistema.";
 $("form-acesso").insertBefore(dica, $("erro-acesso"));'''
 
 CSS_DEMO_EXTRA = '''
@@ -375,26 +371,26 @@ TOUR_JS = r'''
   const $ = (id) => document.getElementById(id);
 
   const passos = [
-    { alvo: ".marca-lateral", titulo: "ECOAR — cenário de Piracicaba",
-      corpo: "Plataforma de fiscalização sonora em <b>modo de triagem</b>: ouve, localiza e registra ocorrências de escapamento, e mostra onde e quando o problema é pior. Os <b>cinco pontos</b> desta tela saíram de levantamento documental sobre Piracicaba — operação da Semuttran na Av. Presidente Kennedy, requerimentos da Câmara, polo de lazer da Rua do Porto. Vou apresentar o essencial em um minuto." },
+    { alvo: ".marca-lateral", titulo: "ECOAR",
+      corpo: "Plataforma de fiscalização sonora operando em <b>modo de triagem</b>. Os sensores ouvem, localizam e registram ocorrências de escapamento adulterado, e o painel mostra onde e quando o problema se concentra. Esta demonstração usa cinco pontos de Piracicaba." },
     { tela: "priorizacao", alvo: ".heatmap", titulo: "Quando o problema é pior",
-      corpo: "Mapa de calor por dia da semana × hora, só de eventos <b>confirmados por operador</b>. É o que a prefeitura leva para a equipe de blitz — direciona a fiscalização humana que já existe." },
+      corpo: "Mapa de calor por dia da semana e hora, montado apenas com eventos <b>confirmados por operador</b>. É o material que a equipe de fiscalização usa para definir dia e horário de blitz." },
     { tela: "priorizacao", alvo: ".bloco:last-of-type .tabela", titulo: "Onde o problema é pior",
-      corpo: "Os cinco pontos de Piracicaba ordenados por ocorrências confirmadas. Cada ponto saiu de um documento — operação da Semuttran, requerimento da Câmara, polo de lazer. O produto responde <b>onde e quando</b> — não <b>quem</b>: em triagem, placa não é lida." },
-    { tela: "revisao", alvo: ".coluna-fila", titulo: "Toda ocorrência passa por um humano",
-      corpo: "Nenhum evento vira estatística sozinho. O operador revisa cada um antes de contar — é a regra que dá valor jurídico à evidência." },
-    { tela: "revisao", abrir: true, alvo: ".grade-medidas", titulo: "O que o nó mediu",
-      corpo: "Score do classificador, ângulo da fonte (com margem de erro) e nível sonoro. O nível vem do array e é <b>estimativa sem valor legal</b> — o sistema é honesto sobre isso na própria tela." },
+      corpo: "Os pontos monitorados, ordenados por ocorrências confirmadas. Em modo de triagem o sistema responde <b>onde e quando</b>, nunca <b>quem</b>: a placa não é lida nem armazenada." },
+    { tela: "revisao", alvo: ".coluna-fila", titulo: "Toda ocorrência passa por um operador",
+      corpo: "Nenhum evento entra na estatística sozinho. Cada um é revisado antes de contar, e é isso que sustenta a evidência em caso de contestação." },
+    { tela: "revisao", abrir: true, alvo: ".grade-medidas", titulo: "O que o sensor registrou",
+      corpo: "Score do classificador, ângulo da fonte com margem de erro, e nível sonoro. O nível vem do array de microfones e é uma <b>estimativa sem valor legal</b>, o que fica declarado na própria tela." },
     { tela: "revisao", abrir: true, alvo: ".porque", titulo: "O porquê do resultado",
-      corpo: "A leitura em uma frase: por que o evento é <b>acionar</b>, <b>ambíguo</b> ou <b>descartar</b>, e por que está <b>pendente</b> (esperando o operador). A decisão do nó é determinística e versionada." },
+      corpo: "Em uma frase: por que o evento foi classificado como <b>acionar</b>, <b>ambíguo</b> ou <b>descartar</b>, e por que ainda está <b>pendente</b>. A decisão do sensor é determinística e versionada." },
     { tela: "revisao", abrir: true, alvo: ".regras", titulo: "As regras, uma a uma",
-      corpo: "A decisão não é caixa-preta: são regras explícitas, cada uma com o que se esperava e o que se mediu. É o que transforma \"o sistema decidiu\" em \"decidiu por estas razões\"." },
+      corpo: "A decisão não é caixa-preta. São regras explícitas, cada uma mostrando o que se esperava e o que foi medido, de modo que a conclusão possa ser reconstruída depois." },
     { tela: "revisao", abrir: true, alvo: ".decisao", titulo: "A validação humana",
-      corpo: "Confirmar ou rejeitar, com observação registrada em nome do operador. Só o que for confirmado entra na priorização — e a decisão nunca se apaga, corrige-se por cima." },
+      corpo: "Confirmar ou rejeitar, com observação registrada em nome do operador. Só o que for confirmado entra na priorização, e a decisão nunca é apagada: correção se faz com um novo registro por cima." },
     { tela: "auditoria", alvo: ".grade-cartoes", titulo: "À prova de adulteração", admin: true,
-      corpo: "Cada passo — recebimento, acesso à evidência, decisão — é encadeado por hash. Mexer no histórico quebra a cadeia, e o painel acusa na hora." },
+      corpo: "Recebimento, acesso à evidência e decisão ficam encadeados por hash. Qualquer alteração no histórico quebra a cadeia, e o painel aponta na hora." },
     { alvo: ".marca-lateral", titulo: "Pronto",
-      corpo: "Explore à vontade. O cenário é de <b>Piracicaba</b>, com pontos tirados de documentos públicos — mas os volumes são construídos, não medidos: a campanha de gravação em campo é o passo seguinte. Clique no <b>?</b> no canto para rever este guia." },
+      corpo: "Explore o painel à vontade. Os dados desta demonstração são ilustrativos: a campanha de gravação em campo é a etapa que consolida os números reais da cidade. O botão <b>?</b> no canto reabre este guia." },
   ];
 
   let idx = 0, hi = null, card = null, ativo = false;
