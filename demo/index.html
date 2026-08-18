@@ -453,7 +453,110 @@ html, body { height: auto; }
 .tour-ajuda { color: var(--ambar); font-size: 12.5px; padding: 7px 10px; }
 .tour-ajuda:hover { border-color: var(--ambar); color: var(--ambar); }
 @media (prefers-reduced-motion: reduce) { .tour-hi { transition: none; } }
+
+/* -- portão de acesso (demonstração) ------------------------------- */
+body:not(.portao-liberado) #acesso,
+body:not(.portao-liberado) #painel { display: none !important; }
+
+#portao {
+  min-height: 100vh; display: grid; place-items: center; padding: 24px;
+}
+#portao .cartao-acesso { text-align: left; }
+#portao .marca { font-size: 26px; }
+#portao p.explicacao {
+  color: var(--texto-fraco); font-size: 13px; line-height: 1.6; margin: 4px 0 24px;
+}
+#portao .erro-portao {
+  color: var(--vermelho); font-size: 12.5px; margin: -10px 0 16px; min-height: 1em;
+}
+#portao .selo-expirado {
+  display: inline-block; margin-bottom: 14px; padding: 4px 10px;
+  border-radius: 20px; background: rgba(224,82,82,0.14); color: var(--vermelho);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+}
+
+/* -- rodapé de marca e confidencialidade (demonstração) ------------ */
+.rodape-marca {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 6px 12px; font-size: 10.5px; color: var(--texto-fraco);
+  background: rgba(14,17,19,0.88); border-top: 1px solid var(--borda);
+  font-family: var(--mono); letter-spacing: 0.02em; text-align: center;
+}
+.rodape-marca strong { color: var(--texto); font-weight: 600; }
+@media (max-width: 640px) { .rodape-marca { font-size: 9.5px; padding: 5px 8px; } }
 </style>
+<script>
+(function () {
+  "use strict";
+  var HASH_SENHA = "2f086c010501641a1df05660e86609477255e251135e1e2703a819fb7dab7b16";
+  var EXPIRA_EM = "2026-08-21T20:59:25.178342+00:00";
+  var CHAVE_SESSAO = "ecoar-demo-portao-v1";
+  var $ = function (id) { return document.getElementById(id); };
+
+  function expirado() { return new Date() > new Date(EXPIRA_EM); }
+
+  async function sha256(texto) {
+    var buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
+    return Array.from(new Uint8Array(buf))
+      .map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+  }
+
+  function liberar() {
+    try { sessionStorage.setItem(CHAVE_SESSAO, "1"); } catch (e) {}
+    document.body.classList.add("portao-liberado");
+    var p = $("portao");
+    if (p) p.remove();
+  }
+
+  function montarExpirado() {
+    var raiz = document.createElement("div");
+    raiz.id = "portao";
+    raiz.innerHTML =
+      '<div class="cartao-acesso" style="text-align:center">' +
+      '<span class="selo-expirado">link expirado</span>' +
+      '<h1 class="marca">ECOAR</h1>' +
+      '<p class="explicacao">O acesso a esta demonstração venceu. ' +
+      'Peça um novo link a quem compartilhou este material.</p>' +
+      '</div>';
+    document.body.insertBefore(raiz, document.body.firstChild);
+  }
+
+  function montarSenha() {
+    var raiz = document.createElement("div");
+    raiz.id = "portao";
+    raiz.innerHTML =
+      '<form class="cartao-acesso" id="form-portao">' +
+      '<h1 class="marca">ECOAR</h1>' +
+      '<p class="explicacao">Demonstração de acesso restrito. ' +
+      'Informe a senha combinada para continuar.</p>' +
+      '<label for="senha-portao">Senha de acesso</label>' +
+      '<input id="senha-portao" type="password" autocomplete="off" required>' +
+      '<p class="erro-portao" id="erro-portao" hidden>Senha incorreta.</p>' +
+      '<button type="submit">Entrar</button>' +
+      '</form>';
+    document.body.insertBefore(raiz, document.body.firstChild);
+    $("form-portao").addEventListener("submit", async function (ev) {
+      ev.preventDefault();
+      var valor = $("senha-portao").value || "";
+      var hash = await sha256(valor);
+      if (hash === HASH_SENHA) { liberar(); }
+      else {
+        $("erro-portao").hidden = false;
+        $("senha-portao").value = "";
+        $("senha-portao").focus();
+      }
+    });
+  }
+
+  if (expirado()) { montarExpirado(); return; }
+  var jaLiberado = false;
+  try { jaLiberado = sessionStorage.getItem(CHAVE_SESSAO) === "1"; } catch (e) {}
+  if (jaLiberado) { document.body.classList.add("portao-liberado"); }
+  else { montarSenha(); }
+})();
+</script>
+<div class="rodape-marca"><strong>ECOAR&trade;</strong> · Studio Cerne · material confidencial de demonstração, não distribuir</div>
 <div class="faixa-demo" title="Dados de exemplo — não é captura de campo">demonstração · dados de exemplo</div>
 <div id="acesso" class="acesso">
   <form class="cartao-acesso" id="form-acesso">

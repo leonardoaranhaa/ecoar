@@ -10,12 +10,26 @@ Gera:
   <scratchpad>/demo-artifact.html     — versão só-conteúdo, para publicar Artifact
 
 Rode scripts/exportar_demo.py antes, para ter demo/dados-demo.js atualizado.
+
+Opções:
+  --senha=FRASE           senha do portão de acesso (padrão: ver SENHA_PADRAO)
+  --validade-dias=N       dias até o link expirar (padrão: 3)
+  --artifact=CAMINHO      também grava a versão só-conteúdo nesse caminho
+
+O portão de acesso e a validade são proteção do lado do cliente (quem souber
+ler o código-fonte da página contorna) — o objetivo é impedir compartilhamento
+casual do link puro, não resistir a alguém tecnicamente determinado.
 """
 
 from __future__ import annotations
 
+import hashlib
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+SENHA_PADRAO = "piracicaba2026"
+VALIDADE_DIAS_PADRAO = 3
 
 RAIZ = Path(__file__).resolve().parents[1]
 
@@ -539,6 +553,136 @@ TOUR_JS = r'''
 FAIXA_DEMO_FIM = ""  # marcador
 
 # ---------------------------------------------------------------------------
+# Portão de acesso (demonstração): senha + validade por data. Proteção do
+# lado do cliente — quem souber ler o código-fonte da página contorna — o
+# objetivo é impedir que o link puro circule sem controle, não resistir a
+# alguém tecnicamente determinado. O conteúdo real (#acesso, #painel) fica
+# escondido por CSS até o portão liberar, então não há flash do painel antes
+# da checagem.
+# ---------------------------------------------------------------------------
+
+PORTAO_CSS = '''
+/* -- portão de acesso (demonstração) ------------------------------- */
+body:not(.portao-liberado) #acesso,
+body:not(.portao-liberado) #painel { display: none !important; }
+
+#portao {
+  min-height: 100vh; display: grid; place-items: center; padding: 24px;
+}
+#portao .cartao-acesso { text-align: left; }
+#portao .marca { font-size: 26px; }
+#portao p.explicacao {
+  color: var(--texto-fraco); font-size: 13px; line-height: 1.6; margin: 4px 0 24px;
+}
+#portao .erro-portao {
+  color: var(--vermelho); font-size: 12.5px; margin: -10px 0 16px; min-height: 1em;
+}
+#portao .selo-expirado {
+  display: inline-block; margin-bottom: 14px; padding: 4px 10px;
+  border-radius: 20px; background: rgba(224,82,82,0.14); color: var(--vermelho);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+}
+'''
+
+RODAPE_MARCA_CSS = '''
+/* -- rodapé de marca e confidencialidade (demonstração) ------------ */
+.rodape-marca {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 6px 12px; font-size: 10.5px; color: var(--texto-fraco);
+  background: rgba(14,17,19,0.88); border-top: 1px solid var(--borda);
+  font-family: var(--mono); letter-spacing: 0.02em; text-align: center;
+}
+.rodape-marca strong { color: var(--texto); font-weight: 600; }
+@media (max-width: 640px) { .rodape-marca { font-size: 9.5px; padding: 5px 8px; } }
+'''
+
+RODAPE_MARCA_HTML = (
+    '<div class="rodape-marca">'
+    "<strong>ECOAR&trade;</strong> · Studio Cerne · material confidencial de "
+    "demonstração, não distribuir"
+    "</div>"
+)
+
+
+PORTAO_JS_MODELO = r'''
+(function () {
+  "use strict";
+  var HASH_SENHA = "__HASH_SENHA__";
+  var EXPIRA_EM = "__EXPIRA_EM__";
+  var CHAVE_SESSAO = "ecoar-demo-portao-v1";
+  var $ = function (id) { return document.getElementById(id); };
+
+  function expirado() { return new Date() > new Date(EXPIRA_EM); }
+
+  async function sha256(texto) {
+    var buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
+    return Array.from(new Uint8Array(buf))
+      .map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+  }
+
+  function liberar() {
+    try { sessionStorage.setItem(CHAVE_SESSAO, "1"); } catch (e) {}
+    document.body.classList.add("portao-liberado");
+    var p = $("portao");
+    if (p) p.remove();
+  }
+
+  function montarExpirado() {
+    var raiz = document.createElement("div");
+    raiz.id = "portao";
+    raiz.innerHTML =
+      '<div class="cartao-acesso" style="text-align:center">' +
+      '<span class="selo-expirado">link expirado</span>' +
+      '<h1 class="marca">ECOAR</h1>' +
+      '<p class="explicacao">O acesso a esta demonstração venceu. ' +
+      'Peça um novo link a quem compartilhou este material.</p>' +
+      '</div>';
+    document.body.insertBefore(raiz, document.body.firstChild);
+  }
+
+  function montarSenha() {
+    var raiz = document.createElement("div");
+    raiz.id = "portao";
+    raiz.innerHTML =
+      '<form class="cartao-acesso" id="form-portao">' +
+      '<h1 class="marca">ECOAR</h1>' +
+      '<p class="explicacao">Demonstração de acesso restrito. ' +
+      'Informe a senha combinada para continuar.</p>' +
+      '<label for="senha-portao">Senha de acesso</label>' +
+      '<input id="senha-portao" type="password" autocomplete="off" required>' +
+      '<p class="erro-portao" id="erro-portao" hidden>Senha incorreta.</p>' +
+      '<button type="submit">Entrar</button>' +
+      '</form>';
+    document.body.insertBefore(raiz, document.body.firstChild);
+    $("form-portao").addEventListener("submit", async function (ev) {
+      ev.preventDefault();
+      var valor = $("senha-portao").value || "";
+      var hash = await sha256(valor);
+      if (hash === HASH_SENHA) { liberar(); }
+      else {
+        $("erro-portao").hidden = false;
+        $("senha-portao").value = "";
+        $("senha-portao").focus();
+      }
+    });
+  }
+
+  if (expirado()) { montarExpirado(); return; }
+  var jaLiberado = false;
+  try { jaLiberado = sessionStorage.getItem(CHAVE_SESSAO) === "1"; } catch (e) {}
+  if (jaLiberado) { document.body.classList.add("portao-liberado"); }
+  else { montarSenha(); }
+})();
+'''
+
+
+def _portao_js(hash_senha: str, expira_iso: str) -> str:
+    return PORTAO_JS_MODELO.replace("__HASH_SENHA__", hash_senha).replace(
+        "__EXPIRA_EM__", expira_iso
+    )
+
+# ---------------------------------------------------------------------------
 # Fila de revisão no celular — lista OU detalhe, nunca as duas empilhadas.
 #
 # Na tela larga a fila e o detalhe ficam lado a lado (.revisao é grid de duas
@@ -634,16 +778,28 @@ def corpo_do_painel() -> str:
     return corpo.strip()
 
 
-def montar(standalone: bool) -> str:
-    css = (RAIZ / "dashboard" / "estilo.css").read_text(encoding="utf-8") + CSS_DEMO_EXTRA + TOUR_CSS
+def montar(standalone: bool, senha: str, expira_em: datetime) -> str:
+    css = (
+        (RAIZ / "dashboard" / "estilo.css").read_text(encoding="utf-8")
+        + CSS_DEMO_EXTRA
+        + TOUR_CSS
+        + PORTAO_CSS
+        + RODAPE_MARCA_CSS
+    )
     dados = (RAIZ / "demo" / "dados-demo.js").read_text(encoding="utf-8")
     # `</` dentro do JSON quebraria o <script>. Escapar mantém o valor idêntico em JS.
     dados = dados.replace("</", "<\\/")
     painel = transformar_painel()
     corpo = corpo_do_painel()
 
+    hash_senha = hashlib.sha256(senha.encode("utf-8")).hexdigest()
+    expira_iso = expira_em.astimezone(timezone.utc).isoformat()
+    portao_js = _portao_js(hash_senha, expira_iso)
+
     partes = [
         f"<style>{css}</style>",
+        f"<script>{portao_js}</script>",
+        RODAPE_MARCA_HTML,
         FAIXA_DEMO,
         corpo,
         f"<script>{dados}</script>",
@@ -674,20 +830,36 @@ def main() -> int:
     if not (RAIZ / "demo" / "dados-demo.js").exists():
         raise SystemExit("falta demo/dados-demo.js — rode antes: python -m scripts.exportar_demo")
 
-    standalone = montar(standalone=True)
-    (RAIZ / "demo" / "index.html").write_text(standalone, encoding="utf-8")
-
+    senha = SENHA_PADRAO
+    dias = VALIDADE_DIAS_PADRAO
     scratch = None
     for arg in sys.argv[1:]:
         if arg.startswith("--artifact="):
             scratch = Path(arg.split("=", 1)[1])
+        elif arg.startswith("--senha="):
+            senha = arg.split("=", 1)[1]
+        elif arg.startswith("--validade-dias="):
+            dias = int(arg.split("=", 1)[1])
+
+    expira_em = datetime.now(tz=timezone.utc) + timedelta(days=dias)
+
+    standalone = montar(standalone=True, senha=senha, expira_em=expira_em)
+    (RAIZ / "demo" / "index.html").write_text(standalone, encoding="utf-8")
+
     if scratch:
-        scratch.write_text(montar(standalone=False), encoding="utf-8")
+        conteudo_artifact = montar(standalone=False, senha=senha, expira_em=expira_em)
+        scratch.write_text(conteudo_artifact, encoding="utf-8")
 
     kb = len(standalone.encode("utf-8")) / 1024
     print(f"gerado demo/index.html ({kb:.0f} KB, self-contained)")
     if scratch:
         print(f"gerado {scratch} (só-conteúdo, para Artifact)")
+    print(f"\nsenha de acesso ...... {senha}")
+    print(f"expira em ............ {expira_em.astimezone().strftime('%d/%m/%Y %H:%M')} "
+          f"(horário local, {dias} dia(s) a partir de agora)")
+    print("\nPasse a senha separadamente de quem receber o link (mensagem, verbalmente).")
+    print("Proteção do lado do cliente: impede compartilhamento casual do link, não é")
+    print("resistente a alguém tecnicamente determinado a ler o código-fonte da página.")
     return 0
 
 
