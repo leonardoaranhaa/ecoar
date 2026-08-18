@@ -474,6 +474,11 @@ body:not(.portao-liberado) #painel { display: none !important; }
   border-radius: 20px; background: rgba(224,82,82,0.14); color: var(--vermelho);
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
 }
+#portao .selo-aguardando {
+  display: inline-block; margin-bottom: 14px; padding: 4px 10px;
+  border-radius: 20px; background: rgba(245,166,35,0.14); color: var(--ambar);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+}
 
 /* -- rodapé de marca e confidencialidade (demonstração) ------------ */
 .rodape-marca {
@@ -490,11 +495,22 @@ body:not(.portao-liberado) #painel { display: none !important; }
 (function () {
   "use strict";
   var HASH_SENHA = "2f086c010501641a1df05660e86609477255e251135e1e2703a819fb7dab7b16";
-  var EXPIRA_EM = "2026-08-21T20:59:25.178342+00:00";
+  var INICIO_EM = "2026-08-19T11:00:00+00:00";
+  var EXPIRA_EM = "2026-08-22T11:00:00+00:00";
   var CHAVE_SESSAO = "ecoar-demo-portao-v1";
   var $ = function (id) { return document.getElementById(id); };
 
+  function aindaNaoComecou() { return new Date() < new Date(INICIO_EM); }
   function expirado() { return new Date() > new Date(EXPIRA_EM); }
+
+  function formatarBrasilia(iso) {
+    try {
+      return new Date(iso).toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit",
+        year: "numeric", hour: "2-digit", minute: "2-digit",
+      }) + " (horário de Brasília)";
+    } catch (e) { return iso; }
+  }
 
   async function sha256(texto) {
     var buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
@@ -509,17 +525,31 @@ body:not(.portao-liberado) #painel { display: none !important; }
     if (p) p.remove();
   }
 
-  function montarExpirado() {
+  function montarAviso(selo, corpo) {
     var raiz = document.createElement("div");
     raiz.id = "portao";
     raiz.innerHTML =
-      '<div class="cartao-acesso" style="text-align:center">' +
-      '<span class="selo-expirado">link expirado</span>' +
+      '<div class="cartao-acesso" style="text-align:center">' + selo +
       '<h1 class="marca">ECOAR</h1>' +
-      '<p class="explicacao">O acesso a esta demonstração venceu. ' +
-      'Peça um novo link a quem compartilhou este material.</p>' +
+      '<p class="explicacao">' + corpo + '</p>' +
       '</div>';
     document.body.insertBefore(raiz, document.body.firstChild);
+  }
+
+  function montarAindaNaoComecou() {
+    montarAviso(
+      '<span class="selo-aguardando">ainda não disponível</span>',
+      "Esta demonstração abre em " + formatarBrasilia(INICIO_EM) + ". " +
+      "Volte a este link a partir desse horário."
+    );
+  }
+
+  function montarExpirado() {
+    montarAviso(
+      '<span class="selo-expirado">link expirado</span>',
+      "O acesso a esta demonstração venceu. Peça um novo link a quem " +
+      "compartilhou este material."
+    );
   }
 
   function montarSenha() {
@@ -549,6 +579,7 @@ body:not(.portao-liberado) #painel { display: none !important; }
     });
   }
 
+  if (aindaNaoComecou()) { montarAindaNaoComecou(); return; }
   if (expirado()) { montarExpirado(); return; }
   var jaLiberado = false;
   try { jaLiberado = sessionStorage.getItem(CHAVE_SESSAO) === "1"; } catch (e) {}

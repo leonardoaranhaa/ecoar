@@ -12,9 +12,10 @@ Gera:
 Rode scripts/exportar_demo.py antes, para ter demo/dados-demo.js atualizado.
 
 Opções:
-  --senha=FRASE           senha do portão de acesso (padrão: ver SENHA_PADRAO)
-  --validade-dias=N       dias até o link expirar (padrão: 3)
-  --artifact=CAMINHO      também grava a versão só-conteúdo nesse caminho
+  --senha=FRASE            senha do portão de acesso (padrão: ver SENHA_PADRAO)
+  --inicio=AAAA-MM-DDTHH:MM  início da validade, horário de Brasília (padrão: agora)
+  --validade-dias=N        dias de validade a partir do início (padrão: 3)
+  --artifact=CAMINHO       também grava a versão só-conteúdo nesse caminho
 
 O portão de acesso e a validade são proteção do lado do cliente (quem souber
 ler o código-fonte da página contorna) — o objetivo é impedir compartilhamento
@@ -27,9 +28,11 @@ import hashlib
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 SENHA_PADRAO = "piracicaba2026"
 VALIDADE_DIAS_PADRAO = 3
+FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
 
 RAIZ = Path(__file__).resolve().parents[1]
 
@@ -582,6 +585,11 @@ body:not(.portao-liberado) #painel { display: none !important; }
   border-radius: 20px; background: rgba(224,82,82,0.14); color: var(--vermelho);
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
 }
+#portao .selo-aguardando {
+  display: inline-block; margin-bottom: 14px; padding: 4px 10px;
+  border-radius: 20px; background: rgba(245,166,35,0.14); color: var(--ambar);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+}
 '''
 
 RODAPE_MARCA_CSS = '''
@@ -609,11 +617,22 @@ PORTAO_JS_MODELO = r'''
 (function () {
   "use strict";
   var HASH_SENHA = "__HASH_SENHA__";
+  var INICIO_EM = "__INICIO_EM__";
   var EXPIRA_EM = "__EXPIRA_EM__";
   var CHAVE_SESSAO = "ecoar-demo-portao-v1";
   var $ = function (id) { return document.getElementById(id); };
 
+  function aindaNaoComecou() { return new Date() < new Date(INICIO_EM); }
   function expirado() { return new Date() > new Date(EXPIRA_EM); }
+
+  function formatarBrasilia(iso) {
+    try {
+      return new Date(iso).toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit",
+        year: "numeric", hour: "2-digit", minute: "2-digit",
+      }) + " (horário de Brasília)";
+    } catch (e) { return iso; }
+  }
 
   async function sha256(texto) {
     var buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
@@ -628,17 +647,31 @@ PORTAO_JS_MODELO = r'''
     if (p) p.remove();
   }
 
-  function montarExpirado() {
+  function montarAviso(selo, corpo) {
     var raiz = document.createElement("div");
     raiz.id = "portao";
     raiz.innerHTML =
-      '<div class="cartao-acesso" style="text-align:center">' +
-      '<span class="selo-expirado">link expirado</span>' +
+      '<div class="cartao-acesso" style="text-align:center">' + selo +
       '<h1 class="marca">ECOAR</h1>' +
-      '<p class="explicacao">O acesso a esta demonstração venceu. ' +
-      'Peça um novo link a quem compartilhou este material.</p>' +
+      '<p class="explicacao">' + corpo + '</p>' +
       '</div>';
     document.body.insertBefore(raiz, document.body.firstChild);
+  }
+
+  function montarAindaNaoComecou() {
+    montarAviso(
+      '<span class="selo-aguardando">ainda não disponível</span>',
+      "Esta demonstração abre em " + formatarBrasilia(INICIO_EM) + ". " +
+      "Volte a este link a partir desse horário."
+    );
+  }
+
+  function montarExpirado() {
+    montarAviso(
+      '<span class="selo-expirado">link expirado</span>',
+      "O acesso a esta demonstração venceu. Peça um novo link a quem " +
+      "compartilhou este material."
+    );
   }
 
   function montarSenha() {
@@ -668,6 +701,7 @@ PORTAO_JS_MODELO = r'''
     });
   }
 
+  if (aindaNaoComecou()) { montarAindaNaoComecou(); return; }
   if (expirado()) { montarExpirado(); return; }
   var jaLiberado = false;
   try { jaLiberado = sessionStorage.getItem(CHAVE_SESSAO) === "1"; } catch (e) {}
@@ -677,9 +711,11 @@ PORTAO_JS_MODELO = r'''
 '''
 
 
-def _portao_js(hash_senha: str, expira_iso: str) -> str:
-    return PORTAO_JS_MODELO.replace("__HASH_SENHA__", hash_senha).replace(
-        "__EXPIRA_EM__", expira_iso
+def _portao_js(hash_senha: str, inicio_iso: str, expira_iso: str) -> str:
+    return (
+        PORTAO_JS_MODELO.replace("__HASH_SENHA__", hash_senha)
+        .replace("__INICIO_EM__", inicio_iso)
+        .replace("__EXPIRA_EM__", expira_iso)
     )
 
 # ---------------------------------------------------------------------------
@@ -778,7 +814,9 @@ def corpo_do_painel() -> str:
     return corpo.strip()
 
 
-def montar(standalone: bool, senha: str, expira_em: datetime) -> str:
+def montar(
+    standalone: bool, senha: str, inicio_em: datetime, expira_em: datetime
+) -> str:
     css = (
         (RAIZ / "dashboard" / "estilo.css").read_text(encoding="utf-8")
         + CSS_DEMO_EXTRA
@@ -793,8 +831,9 @@ def montar(standalone: bool, senha: str, expira_em: datetime) -> str:
     corpo = corpo_do_painel()
 
     hash_senha = hashlib.sha256(senha.encode("utf-8")).hexdigest()
+    inicio_iso = inicio_em.astimezone(timezone.utc).isoformat()
     expira_iso = expira_em.astimezone(timezone.utc).isoformat()
-    portao_js = _portao_js(hash_senha, expira_iso)
+    portao_js = _portao_js(hash_senha, inicio_iso, expira_iso)
 
     partes = [
         f"<style>{css}</style>",
@@ -826,12 +865,19 @@ def montar(standalone: bool, senha: str, expira_em: datetime) -> str:
     )
 
 
+def _parse_inicio(valor: str) -> datetime:
+    """`--inicio=AAAA-MM-DDTHH:MM`, interpretado em horário de Brasília."""
+    ingenuo = datetime.fromisoformat(valor)
+    return ingenuo.replace(tzinfo=FUSO_BRASILIA)
+
+
 def main() -> int:
     if not (RAIZ / "demo" / "dados-demo.js").exists():
         raise SystemExit("falta demo/dados-demo.js — rode antes: python -m scripts.exportar_demo")
 
     senha = SENHA_PADRAO
     dias = VALIDADE_DIAS_PADRAO
+    inicio_em = datetime.now(tz=timezone.utc)
     scratch = None
     for arg in sys.argv[1:]:
         if arg.startswith("--artifact="):
@@ -840,23 +886,30 @@ def main() -> int:
             senha = arg.split("=", 1)[1]
         elif arg.startswith("--validade-dias="):
             dias = int(arg.split("=", 1)[1])
+        elif arg.startswith("--inicio="):
+            inicio_em = _parse_inicio(arg.split("=", 1)[1])
 
-    expira_em = datetime.now(tz=timezone.utc) + timedelta(days=dias)
+    expira_em = inicio_em + timedelta(days=dias)
 
-    standalone = montar(standalone=True, senha=senha, expira_em=expira_em)
+    standalone = montar(standalone=True, senha=senha, inicio_em=inicio_em, expira_em=expira_em)
     (RAIZ / "demo" / "index.html").write_text(standalone, encoding="utf-8")
 
     if scratch:
-        conteudo_artifact = montar(standalone=False, senha=senha, expira_em=expira_em)
+        conteudo_artifact = montar(
+            standalone=False, senha=senha, inicio_em=inicio_em, expira_em=expira_em
+        )
         scratch.write_text(conteudo_artifact, encoding="utf-8")
 
     kb = len(standalone.encode("utf-8")) / 1024
+    fmt = "%d/%m/%Y %H:%M"
     print(f"gerado demo/index.html ({kb:.0f} KB, self-contained)")
     if scratch:
         print(f"gerado {scratch} (só-conteúdo, para Artifact)")
     print(f"\nsenha de acesso ...... {senha}")
-    print(f"expira em ............ {expira_em.astimezone().strftime('%d/%m/%Y %H:%M')} "
-          f"(horário local, {dias} dia(s) a partir de agora)")
+    print(f"início da validade ... {inicio_em.astimezone(FUSO_BRASILIA).strftime(fmt)} "
+          "(horário de Brasília)")
+    print(f"expira em ............ {expira_em.astimezone(FUSO_BRASILIA).strftime(fmt)} "
+          f"(horário de Brasília, {dias} dia(s) de validade)")
     print("\nPasse a senha separadamente de quem receber o link (mensagem, verbalmente).")
     print("Proteção do lado do cliente: impede compartilhamento casual do link, não é")
     print("resistente a alguém tecnicamente determinado a ler o código-fonte da página.")
