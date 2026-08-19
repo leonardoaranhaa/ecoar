@@ -16,15 +16,22 @@ Opções:
   --inicio=AAAA-MM-DDTHH:MM  início da validade, horário de Brasília (padrão: agora)
   --validade-dias=N        dias de validade a partir do início (padrão: 3)
   --artifact=CAMINHO       também grava a versão só-conteúdo nesse caminho
+  --sem-minificar          pula a minificação de JS/CSS (mais rápido para testar local)
 
-O portão de acesso e a validade são proteção do lado do cliente (quem souber
-ler o código-fonte da página contorna) — o objetivo é impedir compartilhamento
-casual do link puro, não resistir a alguém tecnicamente determinado.
+O portão de acesso, a validade e a minificação são proteção do lado do
+cliente (quem souber ler o código-fonte da página contorna) — o objetivo é
+impedir compartilhamento casual do link e elevar o esforço de quem tentar
+copiar a interface, não resistir a alguém tecnicamente determinado.
+
+A minificação exige `npx` (Node.js) disponível — usa `terser` para JS e
+`clean-css-cli` para CSS, baixados sob demanda pelo próprio npx. Sem rede ou
+sem Node, use --sem-minificar.
 """
 
 from __future__ import annotations
 
 import hashlib
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -35,6 +42,51 @@ VALIDADE_DIAS_PADRAO = 3
 FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
 
 RAIZ = Path(__file__).resolve().parents[1]
+
+
+class FerramentaDeMinificacaoAusente(RuntimeError):
+    """npx/terser/clean-css-cli não respondeu. O build para aqui de propósito:
+    gerar uma demo "minificada" que na verdade não foi seria pior que avisar."""
+
+
+def _rodar_minificador(comando: list[str], codigo: str) -> str:
+    try:
+        resultado = subprocess.run(
+            comando,
+            input=codigo,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=120,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as erro:
+        raise FerramentaDeMinificacaoAusente(
+            f"não consegui rodar {comando[0]} {comando[1]}: {erro}. "
+            "Precisa de Node.js com acesso a `npx` (baixa a ferramenta sob "
+            "demanda). Sem rede ou Node, rode com --sem-minificar."
+        ) from erro
+    if resultado.returncode != 0:
+        raise FerramentaDeMinificacaoAusente(
+            f"{' '.join(comando)} falhou (código {resultado.returncode}):\n{resultado.stderr}"
+        )
+    saida = resultado.stdout
+    if not saida.strip():
+        raise FerramentaDeMinificacaoAusente(
+            f"{' '.join(comando)} devolveu saída vazia para uma entrada de "
+            f"{len(codigo)} caracteres — provavelmente falhou em silêncio."
+        )
+    return saida
+
+
+def minificar_js(codigo: str) -> str:
+    return _rodar_minificador(
+        ["npx", "-y", "terser", "-c", "-m", "--comments", "false"], codigo
+    )
+
+
+def minificar_css(codigo: str) -> str:
+    return _rodar_minificador(["npx", "-y", "clean-css-cli"], codigo)
+
 
 # ---------------------------------------------------------------------------
 # Trechos do painel.js real que dependem de servidor. Cada um é substituído por
@@ -823,7 +875,11 @@ def corpo_do_painel() -> str:
 
 
 def montar(
-    standalone: bool, senha: str, inicio_em: datetime, expira_em: datetime
+    standalone: bool,
+    senha: str,
+    inicio_em: datetime,
+    expira_em: datetime,
+    minificar: bool = True,
 ) -> str:
     css = (
         (RAIZ / "dashboard" / "estilo.css").read_text(encoding="utf-8")
@@ -842,6 +898,15 @@ def montar(
     inicio_iso = inicio_em.astimezone(timezone.utc).isoformat()
     expira_iso = expira_em.astimezone(timezone.utc).isoformat()
     portao_js = _portao_js(hash_senha, inicio_iso, expira_iso)
+    tour_js = TOUR_JS
+    mestre_detalhe_js = MESTRE_DETALHE_JS
+
+    if minificar:
+        css = minificar_css(css)
+        portao_js = minificar_js(portao_js)
+        painel = minificar_js(painel)
+        tour_js = minificar_js(tour_js)
+        mestre_detalhe_js = minificar_js(mestre_detalhe_js)
 
     partes = [
         f"<style>{css}</style>",
@@ -851,8 +916,8 @@ def montar(
         corpo,
         f"<script>{dados}</script>",
         f"<script>{painel}</script>",
-        f"<script>{TOUR_JS}</script>",
-        f"<script>{MESTRE_DETALHE_JS}</script>",
+        f"<script>{tour_js}</script>",
+        f"<script>{mestre_detalhe_js}</script>",
     ]
     conteudo = "\n".join(partes)
 
@@ -887,6 +952,7 @@ def main() -> int:
     dias = VALIDADE_DIAS_PADRAO
     inicio_em = datetime.now(tz=timezone.utc)
     scratch = None
+    minificar = True
     for arg in sys.argv[1:]:
         if arg.startswith("--artifact="):
             scratch = Path(arg.split("=", 1)[1])
@@ -896,21 +962,33 @@ def main() -> int:
             dias = int(arg.split("=", 1)[1])
         elif arg.startswith("--inicio="):
             inicio_em = _parse_inicio(arg.split("=", 1)[1])
+        elif arg == "--sem-minificar":
+            minificar = False
 
     expira_em = inicio_em + timedelta(days=dias)
 
-    standalone = montar(standalone=True, senha=senha, inicio_em=inicio_em, expira_em=expira_em)
+    standalone = montar(
+        standalone=True,
+        senha=senha,
+        inicio_em=inicio_em,
+        expira_em=expira_em,
+        minificar=minificar,
+    )
     (RAIZ / "demo" / "index.html").write_text(standalone, encoding="utf-8")
 
     if scratch:
         conteudo_artifact = montar(
-            standalone=False, senha=senha, inicio_em=inicio_em, expira_em=expira_em
+            standalone=False,
+            senha=senha,
+            inicio_em=inicio_em,
+            expira_em=expira_em,
+            minificar=minificar,
         )
         scratch.write_text(conteudo_artifact, encoding="utf-8")
 
     kb = len(standalone.encode("utf-8")) / 1024
     fmt = "%d/%m/%Y %H:%M"
-    print(f"gerado demo/index.html ({kb:.0f} KB, self-contained)")
+    print(f"gerado demo/index.html ({kb:.0f} KB, self-contained{'' if minificar else ', sem minificação'})")
     if scratch:
         print(f"gerado {scratch} (só-conteúdo, para Artifact)")
     print(f"\nsenha de acesso ...... {senha}")

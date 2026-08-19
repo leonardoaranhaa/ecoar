@@ -33,7 +33,11 @@ def _janela(dias=3):
 def test_senha_em_texto_claro_nao_aparece_na_pagina(montar):
     inicio, expira = _janela()
     pagina = montar.montar(
-        standalone=True, senha="segredo-de-teste-123", inicio_em=inicio, expira_em=expira
+        standalone=True,
+        senha="segredo-de-teste-123",
+        inicio_em=inicio,
+        expira_em=expira,
+        minificar=False,
     )
 
     assert "segredo-de-teste-123" not in pagina
@@ -44,7 +48,11 @@ def test_hash_da_senha_aparece_no_lugar_do_texto(montar):
 
     inicio, expira = _janela()
     pagina = montar.montar(
-        standalone=True, senha="segredo-de-teste-123", inicio_em=inicio, expira_em=expira
+        standalone=True,
+        senha="segredo-de-teste-123",
+        inicio_em=inicio,
+        expira_em=expira,
+        minificar=False,
     )
 
     hash_esperado = hashlib.sha256(b"segredo-de-teste-123").hexdigest()
@@ -53,7 +61,9 @@ def test_hash_da_senha_aparece_no_lugar_do_texto(montar):
 
 def test_conteudo_real_fica_escondido_ate_o_portao_liberar(montar):
     inicio, expira = _janela()
-    pagina = montar.montar(standalone=True, senha="x", inicio_em=inicio, expira_em=expira)
+    pagina = montar.montar(
+        standalone=True, senha="x", inicio_em=inicio, expira_em=expira, minificar=False
+    )
 
     assert 'id="portao"' not in pagina  # o portão é montado via JS, não no HTML estático
     assert "body:not(.portao-liberado) #acesso" in pagina
@@ -62,7 +72,9 @@ def test_conteudo_real_fica_escondido_ate_o_portao_liberar(montar):
 
 def test_inicio_e_expiracao_vao_para_a_pagina_em_utc(montar):
     inicio, expira = _janela()
-    pagina = montar.montar(standalone=True, senha="x", inicio_em=inicio, expira_em=expira)
+    pagina = montar.montar(
+        standalone=True, senha="x", inicio_em=inicio, expira_em=expira, minificar=False
+    )
 
     assert inicio.isoformat() in pagina
     assert expira.isoformat() in pagina
@@ -72,7 +84,9 @@ def test_portao_avisa_que_e_demonstracao_com_dados_ficticios(montar):
     """Quem recebe o link precisa saber, antes de digitar a senha, que é uma
     página estática de demonstração e que nada ali é dado real."""
     inicio, expira = _janela()
-    pagina = montar.montar(standalone=True, senha="x", inicio_em=inicio, expira_em=expira)
+    pagina = montar.montar(
+        standalone=True, senha="x", inicio_em=inicio, expira_em=expira, minificar=False
+    )
 
     assert "aviso-portao" in pagina
     assert "dados fictícios" in pagina.lower() or "dados ficticios" in pagina.lower()
@@ -81,7 +95,9 @@ def test_portao_avisa_que_e_demonstracao_com_dados_ficticios(montar):
 
 def test_marca_ecoar_aparece_no_rodape(montar):
     inicio, expira = _janela()
-    pagina = montar.montar(standalone=True, senha="x", inicio_em=inicio, expira_em=expira)
+    pagina = montar.montar(
+        standalone=True, senha="x", inicio_em=inicio, expira_em=expira, minificar=False
+    )
 
     assert "ECOAR" in pagina
     assert "rodape-marca" in pagina
@@ -107,3 +123,47 @@ def test_inicio_no_horario_de_brasilia_converte_para_utc_corretamente():
 
     # 08:00 em Brasília (UTC-3, sem horário de verão desde 2019) é 11:00 UTC.
     assert inicio.astimezone(timezone.utc).isoformat() == "2026-08-19T11:00:00+00:00"
+
+
+def _tem_ferramentas_de_minificacao():
+    import shutil
+
+    return shutil.which("npx") is not None
+
+
+@pytest.mark.skipif(
+    not _tem_ferramentas_de_minificacao(),
+    reason="npx não disponível — sem como baixar terser/clean-css-cli",
+)
+def test_versao_minificada_mantem_as_pecas_criticas_do_portao(montar):
+    """A minificação (terser/clean-css) não pode apagar nem embaralhar o que o
+    portão depende: hash da senha, janela de validade e as regras de CSS que
+    escondem o conteúdo real até a liberação."""
+    import hashlib
+
+    inicio, expira = _janela()
+    pagina = montar.montar(
+        standalone=True,
+        senha="segredo-de-teste-123",
+        inicio_em=inicio,
+        expira_em=expira,
+        minificar=True,
+    )
+
+    assert "segredo-de-teste-123" not in pagina
+    assert hashlib.sha256(b"segredo-de-teste-123").hexdigest() in pagina
+    assert inicio.isoformat() in pagina
+    assert expira.isoformat() in pagina
+    assert "body:not(.portao-liberado) #acesso" in pagina
+    assert "aviso-portao" in pagina
+    assert "ECOAR" in pagina
+    assert "confidencial" in pagina.lower()
+
+    pagina_sem_minificar = montar.montar(
+        standalone=True,
+        senha="segredo-de-teste-123",
+        inicio_em=inicio,
+        expira_em=expira,
+        minificar=False,
+    )
+    assert len(pagina) < len(pagina_sem_minificar)
