@@ -464,6 +464,214 @@ Documente as bibliotecas necessárias em requirements.txt.
 
 ---
 
+## PROMPTS 13-16 — ROADMAP MODULAR (`docs/projeto/manual-tecnico.md` seção 12)
+
+Estes quatro prompts correspondem aos módulos levantados na seção 12 do manual
+técnico (roadmap além do ruído de escapamento). Depende de: 4-5 (câmera e
+evidência) para os que reaproveitam a câmera; nenhum deles depende de 8 ou 9
+(visão validada em campo / re-treino), porque nenhum reaproveita o classificador
+de escapamento já treinado.
+
+**Nível de prontidão é bem diferente entre os quatro** — não trate como um bloco
+único:
+
+- **13 (contagem de tráfego)** é o único pronto para construção direta: reaproveita
+  hardware já instalado, não usa dado pessoal, modelo pré-treinado existe pronto.
+- **14 (cruzamento com veículos furtados)** é viável tecnicamente, mas trava numa
+  peça que não é código: acesso formal a uma base de segurança pública. O prompt
+  constrói a abstração e o mock; a implementação real espera a decisão de negócio.
+- **15 (colisão) e 16 (disparo de arma)** ainda não têm especificação técnica —
+  os prompts abaixo são de **estudo de viabilidade**, não de construção. Rodar o
+  estudo antes de abrir um prompt de build é a mesma lógica de "verificado vs.
+  inferido" aplicada à própria decisão de construir.
+
+---
+
+## PROMPT 13 — Contagem e classificação de tráfego (`edge/traffic_counter`)
+
+```
+Estou criando o módulo edge/traffic_counter do projeto ECOAR (veja
+docs/DECISIONS.md para contexto de arquitetura, e docs/projeto/manual-tecnico.md
+seção 12.1).
+
+Diferente do pipeline acústico (edge/camera_trigger), este módulo não espera um
+evento de som: ele amostra a câmera ANPR já instalada em intervalo fixo,
+independente de haver ou não escapamento adulterado passando.
+
+Preciso de:
+1. Um capturador de quadros com cadência configurável (ex.: 1-2 fps),
+   reaproveitando a interface de câmera já definida em
+   edge/camera_trigger/camera.py — não duplicar a abstração, estender se
+   precisar de um método de captura contínua além do disparo por evento
+2. Um classificador de tipo de veículo por quadro (moto/carro/ônibus/caminhão/
+   nenhum), usando um modelo pré-treinado leve (ex.: um detector tipo
+   YOLO-nano/MobileNet-SSD já treinado em classes de veículo comuns — não é
+   preciso treinar do zero, ao contrário do classificador acústico de
+   escapamento, que não tinha dataset público equivalente)
+3. Agregação local por hora e tipo — o nó soma contagens, não guarda quadro a
+   quadro nem envia imagem ao backend. Isso é deliberado: reduz banda 4G e não
+   cria dado pessoal desnecessário — mesmo não sendo placa (D10 é sobre placa
+   especificamente), o princípio de minimização de docs/legal/lgpd.md vale aqui
+   também
+4. Um endpoint novo de envio dos agregados (ex.: POST /v1/trafego, corpo com
+   no_id, janela de tempo, contagem por tipo) — separado do pipeline de eventos
+   acústicos, sem tocar na fila de revisão: este dado não precisa de validação
+   humana individual, porque não gera multa nem estatística de priorização de
+   ruído — é um dado operacional à parte
+5. Modo de simulação sem câmera física: uma fonte de vídeo/quadros sintética ou
+   de arquivo, no mesmo padrão de edge/audio_capture/sintetico.py, para eu
+   testar sem hardware ainda (D11)
+6. No dashboard, uma tela nova (ou uma seção dentro de Métricas) mostrando
+   volume por tipo/hora/nó
+
+Documente no README do módulo que a contagem é aproximada (limitação de
+qualquer classificador de visão em condição real de rua, ângulo de câmera,
+iluminação noturna) e que não tem qualquer finalidade de fiscalização — é dado
+de planejamento de mobilidade, não evidência de infração.
+```
+
+---
+
+## PROMPT 14 — Cruzamento com lista de veículos furtados/roubados (`vision/plate_ocr` + adaptador de consulta)
+
+```
+Estou implementando vision/plate_ocr e o cruzamento com lista de veículos
+furtados/roubados do projeto ECOAR (veja docs/DECISIONS.md — D10 — e
+docs/legal/lgpd.md antes de começar).
+
+IMPORTANTE — isso é uma finalidade de tratamento de dado NOVA e DIFERENTE da
+fiscalização de ruído: cruzamento de placa com base de segurança pública é
+propósito de segurança, não de trânsito, e por LGPD (docs/legal/lgpd.md,
+"finalidades distintas, retenções distintas") precisa de base legal, retenção e
+trilha de auditoria PRÓPRIAS — não reaproveitar a trilha de evidência de ruído
+para isso.
+
+1. Implemente vision/plate_ocr: dois pipelines de OCR independentes sobre a
+   mesma imagem de placa (já capturada pelo evidence_packager). A leitura só é
+   aceita como confiável se os dois concordarem; divergência não vira decisão
+   automática de nada
+2. Crie uma interface abstrata BaseListaVeiculosFurtados com um método
+   consultar(placa: str) -> ResultadoConsulta, seguindo o mesmo padrão de
+   camada de adaptação isolada do SonometroReader (docs/DECISIONS.md D5) — uma
+   implementação mock que devolve resultado de teste, para eu desenvolver sem
+   acesso real à base de segurança pública ainda (que exige convênio formal e
+   não é algo que o código resolve sozinho)
+3. Trate o resultado da consulta com o mínimo de retenção possível: se não
+   houver correspondência, a placa lida NÃO é persistida em lugar nenhum — nem
+   em log, nem em métrica, nem em texto claro — o valor existe só durante o
+   cálculo da consulta e é descartado depois. Isso segue a mesma regra do log
+   de auditoria de ruído (nunca placa em texto claro), aplicada aqui com o
+   mesmo rigor
+4. Se houver correspondência (placa na lista de furtados/roubados), trate como
+   canal de alerta separado, no mesmo padrão do canal de violação patrimonial
+   já existente (docs/DECISIONS.md D14) — prioridade máxima, endpoint próprio,
+   nunca misturado com a fila de revisão de ruído
+5. Esse cruzamento só pode rodar quando um novo flag de configuração
+   (ex.: seguranca.cruzamento_furto: habilitado) estiver explicitamente ligado,
+   e a configuração precisa recusar subir (fail-closed, mesmo padrão do
+   modo=autuacao em edge/config.py) se esse flag estiver ligado sem uma base
+   normativa/convênio declarado
+6. Documente claramente no README que a implementação real de
+   BaseListaVeiculosFurtados (a consulta de verdade) depende de acesso formal a
+   uma base de segurança pública (SINESP/Detran/Polícia Civil) que ainda não
+   temos — o código fica pronto, o acesso ao dado é decisão de negócio, não
+   técnica
+
+Depois de construído, registre esta decisão em docs/DECISIONS.md (nova entrada
+D15) e documente a finalidade/retenção nova em docs/legal/lgpd.md.
+```
+
+---
+
+## PROMPT 15 — Detecção de acidente/colisão — estudo de viabilidade (não é prompt de construção)
+
+```
+Estou avaliando a viabilidade de um módulo de detecção de acidente/colisão para
+o projeto ECOAR (veja docs/DECISIONS.md e docs/projeto/manual-tecnico.md seção
+12.2 — este módulo ainda não tem especificação técnica, é direção futura).
+
+Ainda NÃO é para construir o módulo de produção. Preciso de um estudo de
+viabilidade:
+
+1. Pesquise se existe dataset público de áudio rotulado com eventos de colisão/
+   frenagem brusca/estilhaçamento (datasets de "urban sound event detection"
+   costumam ter classes parecidas) — preciso saber se dá para começar de dado
+   público antes de decidir se vale investir em captação própria (que aqui, ao
+   contrário do escapamento, não posso gravar de forma segura e ética — não dá
+   para provocar uma colisão real para treinar o modelo)
+2. Com esse dataset (ou, na ausência dele, com sons sintéticos de teste —
+   frenagem com pneu cantando + impacto), rode uma prova de conceito: o
+   pipeline de extração de espectrograma já existente em edge/classifier
+   (Prompt 3) consegue discriminar esse padrão (transiente curto e largo em
+   frequência) do padrão de escapamento (tom sustentado com harmônicos)? Ou
+   precisa de uma extração de feature diferente, sensível a transiente/onset,
+   em vez do log-mel atual?
+3. Avalie se o array de 4 microfones de um nó só (raio ~4,5 cm) é suficiente
+   para essa tarefa, já que aqui a localização exata do veículo importa menos
+   que "algo aconteceu perto deste poste, avise alguém rápido" — não precisa da
+   mesma precisão angular que o escapamento
+4. Me entregue um relatório curto (README do módulo) com: o que foi encontrado,
+   se a discriminação parece viável com a arquitetura atual, o que faltaria
+   para um MVP de teste real, e uma estimativa honesta de taxa de falso
+   positivo esperada (buzina forte, motocicleta arrancando, trovão são
+   candidatos óbvios a confundir)
+
+Só depois desse estudo decido se abre um prompt de construção de verdade. Se a
+resposta for "não dá para discriminar com confiança suficiente", quero que isso
+fique registrado — não é fracasso, é a mesma lógica de "verificado vs. inferido"
+aplicada à própria decisão de construir.
+
+IMPORTANTE para qualquer versão futura deste módulo: nunca pode virar
+"confirmação de acidente" — só um candidato para triagem humana imediata. O
+sistema não substitui central de emergência nem verificação no local.
+```
+
+---
+
+## PROMPT 16 — Detecção de disparo de arma de fogo — estudo de viabilidade (muda o escopo do produto)
+
+```
+Estou avaliando a viabilidade técnica de detecção de disparo de arma de fogo
+sobre o hardware do ECOAR (veja docs/projeto/manual-tecnico.md seção 12.2 —
+precedente citado: ShotSpotter/SoundThinking em Niterói).
+
+ATENÇÃO — antes de qualquer código, isto muda o produto: o comprador não é mais
+Secretaria de Trânsito/Mobilidade, é Segurança Pública/Guarda Municipal; a
+decisão de acionamento tem consequência muito mais séria que uma multa
+(resposta policial real); e a localização precisa pode exigir MULTILATERAÇÃO
+ENTRE NÓS (vários sensores no mesmo bairro triangulando o mesmo disparo), não
+só o array de um nó — isso é um módulo novo no backend, não uma extensão do
+edge/localization atual.
+
+Preciso, primeiro, só de um estudo técnico, sem compromisso de construção:
+
+1. Levante os requisitos reais de sincronismo de relógio entre nós para
+   multilateração funcionar (ShotSpotter usa GPS-disciplined time; o ECOAR hoje
+   usa NTP comum para timestamp de evidência — que precisão isso dá, e é
+   suficiente para triangular a que distância entre nós?)
+2. Avalie se um MVP mais simples faz sentido antes de multilateração completa:
+   cada nó reporta "ouvi um disparo, com esta confiança, neste horário", sem
+   localização precisa — isso já teria valor operacional (volume e horário de
+   ocorrência) por um custo de engenharia muito menor
+3. Pesquise se existe dataset público de assinatura acústica de disparo
+   (existem alguns usados em pesquisa acadêmica) para eu saber se dá pra
+   prototipar um classificador antes de qualquer captação própria (que aqui é
+   ainda mais inviável eticamente que colisão)
+4. Me entregue um relatório de viabilidade com: precisão de timestamp
+   necessária vs. disponível, dado de treino disponível, se o array de 4,5 cm
+   de raio de um nó só discrimina disparo de outros transientes (rojão,
+   escapamento estourando, porta batendo) com confiança mínima aceitável, e uma
+   estimativa do escopo de engenharia adicional (multilateração é sistema
+   novo, não ajuste)
+
+Não escreva nenhum código de classificação ou decisão de acionamento ainda —
+isto é levantamento, para eu decidir com informação se isso vira uma frente
+nova (possivelmente produto separado, não módulo do ECOAR) ou fica só como
+direção mencionada em reunião, como o manual já registra.
+```
+
+---
+
 ## ORDEM RESUMIDA
 
 | # | Prompt | Depende de |
@@ -481,7 +689,17 @@ Documente as bibliotecas necessárias em requirements.txt.
 | 10 | Trilha de auditoria | 6, 7 |
 | 11 | Plataforma de gestão completa (ECOAR) | 7, 9, 10 |
 | 12 | Detecção de violação / antifurto | 4, 6 |
+| 13 | Contagem e classificação de tráfego | 4 |
+| 14 | Cruzamento com veículos furtados/roubados | 5, 10 — e acesso formal a base externa (fora do código) |
+| 15 | Detecção de acidente/colisão — **estudo de viabilidade** | 3 |
+| 16 | Detecção de disparo de arma de fogo — **estudo de viabilidade** | 2, 3 |
 
 ---
 
 *Cada prompt é ponto de partida, não roteiro fechado — ajuste conforme o Claude Code propuser alternativas técnicas ao longo da construção. O importante é manter o princípio de cada seção: validação humana antes de qualquer automação virar decisão final.*
+
+*Prompts 15 e 16 são deliberadamente estudos, não construção: nenhum dos dois
+tem especificação técnica validada (ver manual técnico seção 12.2), e o 16 muda
+quem é o comprador do produto. Rodar o estudo primeiro é a mesma lógica de
+"verificado vs. inferido" aplicada à decisão de construir, não só à decisão de
+multar.*

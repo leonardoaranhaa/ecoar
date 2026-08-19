@@ -6,6 +6,7 @@
    perdeu a sessão. É um terminal compartilhado de repartição. */
 
 const ARMAZEM = "ecoar.token";
+const ARMAZEM_RECURSOS = "ecoar.recursos-adicionais";
 const estado = {
   token: null,
   eu: null,
@@ -14,12 +15,18 @@ const estado = {
   selecionado: null,
   filtroHistorico: "",
   blobs: [],
+  /* Módulos complementares: desligados por padrão, ligados sob demanda em
+     Configurações. Não persistem além da sessão, pelo mesmo motivo do token
+     (terminal compartilhado de repartição). */
+  recursosAdicionais: { trafego: false, disparo: false },
 };
 
 const $ = (id) => document.getElementById(id);
 
 /* Telas. `admin: true` só aparece para o perfil admin (RBAC no cliente; o
-   backend recusa de novo, que é onde a garantia mora). */
+   backend recusa de novo, que é onde a garantia mora). `recurso: "x"` só
+   aparece se estado.recursosAdicionais.x estiver ligado: módulo complementar,
+   nunca visível por padrão. */
 const TELAS = [
   { id: "priorizacao", nome: "Priorização", render: telaPriorizacao },
   { id: "revisao", nome: "Fila de revisão", render: telaRevisao, badge: "pendente_revisao" },
@@ -29,6 +36,9 @@ const TELAS = [
   { id: "metricas", nome: "Métricas", render: telaMetricas },
   { id: "modelo", nome: "Modelo", render: telaModelo, admin: true },
   { id: "auditoria", nome: "Auditoria", render: telaAuditoria, admin: true },
+  { id: "trafego", nome: "Tráfego", render: telaTrafego, admin: true, recurso: "trafego" },
+  { id: "disparo", nome: "Disparo de arma", render: telaDisparo,
+    admin: true, recurso: "disparo", classeNav: "so-beta" },
   { id: "config", nome: "Configurações", render: telaConfig },
 ];
 
@@ -95,17 +105,35 @@ $("form-acesso").addEventListener("submit", async (evento) => {
 
 function sair() {
   sessionStorage.removeItem(ARMAZEM);
+  sessionStorage.removeItem(ARMAZEM_RECURSOS);
   estado.token = null;
   estado.eu = null;
+  estado.recursosAdicionais = { trafego: false, disparo: false };
   $("painel").hidden = true;
   $("acesso").hidden = false;
 }
 $("sair").addEventListener("click", sair);
 
+function carregarRecursosAdicionais() {
+  try {
+    const salvo = JSON.parse(sessionStorage.getItem(ARMAZEM_RECURSOS) || "{}");
+    estado.recursosAdicionais = { ...estado.recursosAdicionais, ...salvo };
+  } catch {
+    /* valor salvo corrompido — mantém o padrão desligado */
+  }
+}
+
+function alternarRecursoAdicional(chave, ligado) {
+  estado.recursosAdicionais[chave] = ligado;
+  sessionStorage.setItem(ARMAZEM_RECURSOS, JSON.stringify(estado.recursosAdicionais));
+  desenharNavegacao();
+}
+
 function abrirPainel() {
   $("acesso").hidden = true;
   $("painel").hidden = false;
   $("quem").textContent = `${estado.eu.nome} · ${estado.eu.perfil}`;
+  carregarRecursosAdicionais();
   desenharNavegacao();
   irPara("priorizacao");
 }
@@ -113,13 +141,17 @@ function abrirPainel() {
 /* -- navegação ---------------------------------------------------- */
 
 function telasVisiveis() {
-  return TELAS.filter((tela) => !tela.admin || estado.eu.admin);
+  return TELAS.filter(
+    (tela) =>
+      (!tela.admin || estado.eu.admin) &&
+      (!tela.recurso || estado.recursosAdicionais[tela.recurso])
+  );
 }
 
 function desenharNavegacao() {
   $("navegacao").innerHTML = telasVisiveis()
     .map(
-      (tela) => `<button class="item-nav ${tela.admin ? "so-admin" : ""}" data-tela="${tela.id}">
+      (tela) => `<button class="item-nav ${tela.admin ? "so-admin" : ""} ${tela.classeNav || ""}" data-tela="${tela.id}">
         <span>${tela.nome}</span>
         ${tela.badge ? `<span class="contagem" data-badge="${tela.badge}" hidden></span>` : ""}
       </button>`
@@ -199,7 +231,7 @@ async function telaPriorizacao() {
   $("conteudo").innerHTML = `
     <div class="topo-tela">
       <div><h1>Priorização de fiscalização</h1>
-        <div class="sub">Onde e quando o problema é pior — para direcionar a blitz</div></div>
+        <div class="sub">Onde e quando o problema é pior, para direcionar a blitz</div></div>
       <div class="acoes-topo">
         <button class="secundario" id="btn-relatorio">Exportar relatório</button>
       </div>
@@ -207,7 +239,7 @@ async function telaPriorizacao() {
     <div class="aviso-tela">${texto(dados.observacao)}</div>
 
     <div class="bloco">
-      <h3>Quando — eventos confirmados por dia da semana × hora</h3>
+      <h3>Quando: eventos confirmados por dia da semana × hora</h3>
       <table class="heatmap">
         <tr><th></th>${DIAS.map((d) => `<th>${d}</th>`).join("")}</tr>
         ${linhas.join("")}
@@ -216,7 +248,7 @@ async function telaPriorizacao() {
     </div>
 
     <div class="bloco">
-      <h3>Onde — pontos por eventos confirmados</h3>
+      <h3>Onde: pontos por eventos confirmados</h3>
       <table class="tabela">
         <tr><th>Nó</th><th>Local</th><th class="num">Confirmados</th><th></th></tr>
         ${ranking}
@@ -310,7 +342,7 @@ function desenharDetalhe(evento) {
       ${medida("Score do alvo", numero(evento.score_alvo, 2), evento.versao_modelo)}
       ${medida("Ângulo", evento.azimute_graus == null ? "—" : `${numero(evento.azimute_graus, 1)}°`,
         evento.margem_graus == null ? "" : `±${numero(evento.margem_graus, 1)}° · conf. ${numero(evento.confianca_doa, 2)}`)}
-      ${medida("Nível estimado", evento.spl_db == null ? "—" : `${numero(evento.spl_db, 1)} dB`, "sem valor legal — array MEMS", true)}
+      ${medida("Nível estimado", evento.spl_db == null ? "—" : `${numero(evento.spl_db, 1)} dB`, "estimativa do array, sem valor legal", true)}
       ${medida("Decisão do nó", evento.acao, evento.versao_politica)}
     </div>
     <div class="porque">
@@ -321,14 +353,14 @@ function desenharDetalhe(evento) {
     </div>
     <div class="bloco"><h3>Áudio do evento</h3>
       <audio controls preload="none" data-src="/v1/eventos/${evento.id}/audio-audicao.wav"></audio>
-      <p class="aviso-audio">Mono 16 bits, só para audição. A evidência é o áudio de 4 canais dentro do pacote.</p></div>
+      <p class="aviso-audio">Versão reduzida, apenas para audição. A evidência é o áudio original de quatro canais guardado no pacote.</p></div>
     ${imagensBloco(evento, manifesto)}
     ${classificacao.explicacao ? `<div class="bloco"><h3>Por que o classificador decidiu assim</h3>
       <div class="explicacao">${texto(classificacao.explicacao)}</div></div>` : ""}
     ${regrasBloco(decisao)}
     <div class="bloco"><h3>Integridade</h3><p class="hash">${texto(evento.hash_manifesto)}</p></div>
     ${pendente ? `<div class="decisao"><h3>Sua decisão</h3>
-      <textarea id="observacao" placeholder="Observação (opcional) — fica registrada com o seu nome"></textarea>
+      <textarea id="observacao" placeholder="Observação (opcional). Fica registrada com o seu nome."></textarea>
       <div class="botoes-decisao">
         <button class="confirmar" id="btn-confirmar">Confirmar ocorrência</button>
         <button class="rejeitar" id="btn-rejeitar">Rejeitar</button>
@@ -346,7 +378,7 @@ function imagensBloco(evento, manifesto) {
   const imagens = manifesto.imagens || [];
   if (!imagens.length) {
     return `<div class="bloco"><h3>Imagens</h3><p class="dica">Sem imagem: a câmera
-      não foi acionada — o evento ficou ambíguo e entrou na fila mesmo assim.</p></div>`;
+      não foi acionada. O evento ficou ambíguo e entrou na fila mesmo assim.</p></div>`;
   }
   const figuras = imagens.map((im) => {
     const nome = (im.arquivo || "").replace("midia/", "");
@@ -363,7 +395,7 @@ function regrasBloco(decisao) {
   const itens = regras.map((r) => `<li>
     <span class="${r.atendida ? "marca-ok" : "marca-nao"}">${r.atendida ? "✓" : "✗"}</span>
     <span class="nome">${texto(r.nome)}</span><span class="medido">${texto(r.medido)}</span></li>`).join("");
-  return `<div class="bloco"><h3>Regras avaliadas pelo nó — ${texto(decisao.versao_politica)}</h3>
+  return `<div class="bloco"><h3>Regras avaliadas pelo nó (${texto(decisao.versao_politica)})</h3>
     <ul class="regras">${itens}</ul></div>`;
 }
 
@@ -429,7 +461,7 @@ async function telaViolacoes() {
 
   $("conteudo").innerHTML = `
     <div class="topo-tela"><div><h1>Violações patrimoniais</h1>
-      <div class="sub">Canal separado da fiscalização — furto e violação de gabinete</div></div></div>
+      <div class="sub">Canal separado da fiscalização: furto e violação de gabinete</div></div></div>
     <div class="aviso-tela">Ocorrência operacional, não evento de fiscalização.
       O alerta chega antes da remoção do equipamento, com prioridade máxima.</div>
     <table class="tabela">
@@ -448,7 +480,7 @@ async function telaViolacoes() {
 async function telaHistorico() {
   $("conteudo").innerHTML = `
     <div class="topo-tela"><div><h1>Histórico</h1>
-      <div class="sub">Eventos já decididos — para recuperar evidência específica</div></div></div>
+      <div class="sub">Eventos já decididos, para recuperar evidência específica</div></div></div>
     <div class="filtros">
       <select id="filtro-status">
         <option value="">Todos os status</option>
@@ -505,7 +537,7 @@ async function telaMetricas() {
       ${cartao("pendente", r.pendentes, "Pendentes")}
       ${cartao("", taxa, "Taxa de rejeição")}
     </div>
-    <div class="bloco"><h3>Eventos por dia — confirmados (verde) e rejeitados (cinza)</h3>
+    <div class="bloco"><h3>Eventos por dia: confirmados (verde) e rejeitados (cinza)</h3>
       ${dias.length ? `<div class="barras">${barras}</div><div class="barra-rotulos">${rotulos}</div>`
         : `<p class="vazio">Sem eventos ainda.</p>`}</div>
     <div class="aviso-tela">${texto(dados.nota_custo)}</div>`;
@@ -541,7 +573,7 @@ async function telaAuditoria() {
 
   $("conteudo").innerHTML = `
     <div class="topo-tela"><div><h1>Trilha de auditoria</h1>
-      <div class="sub">Cadeia encadeada por hash — qualquer alteração do histórico é detectável</div></div></div>
+      <div class="sub">Cadeia encadeada por hash. Qualquer alteração do histórico é detectável.</div></div></div>
     <div class="grade-cartoes">
       <div class="cartao"><div class="valor ${verif.integra ? "pilula-integra" : "pilula-quebrada"}">
         ${verif.integra ? "íntegra" : "QUEBRADA"}</div>
@@ -565,6 +597,26 @@ async function telaConfig() {
     <div class="topo-tela"><div><h1>Configurações</h1>
       <div class="sub">Limiares e calibração vivem na configuração de cada nó</div></div></div>
 
+    ${estado.eu.admin ? `
+    <div class="bloco-recursos">
+      <h3>Módulos complementares</h3>
+      <p class="dica">O mesmo equipamento instalado no poste atende outras
+      demandas além do ruído veicular. Ative abaixo para liberar as telas
+      correspondentes no menu lateral.</p>
+      <div class="toggle-linha">
+        <label class="toggle">
+          <input type="checkbox" id="toggle-trafego" ${estado.recursosAdicionais.trafego ? "checked" : ""}>
+          <span>Tráfego: contagem e classificação por tipo de veículo</span>
+        </label>
+      </div>
+      <div class="toggle-linha">
+        <label class="toggle">
+          <input type="checkbox" id="toggle-disparo" ${estado.recursosAdicionais.disparo ? "checked" : ""}>
+          <span>Disparo de arma de fogo <strong>(em desenvolvimento)</strong></span>
+        </label>
+      </div>
+    </div>` : ""}
+
     <div class="bloco"><h3>Modo de operação por nó</h3>
       <table class="tabela"><tr><th>Nó</th><th>Modo</th></tr>${linhas}</table></div>
 
@@ -574,12 +626,83 @@ async function telaConfig() {
     </div>
 
     <div class="bloco"><h3>Onde ficam as demais configurações</h3>
-      <p class="dica">Limiar de confiança, calibração de SPL por sensor, política de
-      retenção e geometria do array vivem na configuração de cada nó
-      (<span class="hash">config/no-*.yaml</span>), não neste painel. São por nó
-      porque uma via de tráfego pesado tem piso de ruído diferente de uma rua
-      residencial — e mudá-las remotamente sem registro quebraria a
-      reprodutibilidade da decisão.</p></div>`;
+      <p class="dica">Limiar de confiança, calibração de nível sonoro, política de
+      retenção e geometria do array são definidos na configuração de cada nó, não
+      neste painel. Cada ponto tem seu próprio ajuste, porque uma via de tráfego
+      pesado tem piso de ruído bem diferente de uma rua residencial. Alterá-los
+      remotamente sem registro quebraria a reprodutibilidade da decisão.</p></div>`;
+
+  $("toggle-trafego")?.addEventListener("change", (e) =>
+    alternarRecursoAdicional("trafego", e.target.checked));
+  $("toggle-disparo")?.addEventListener("change", (e) =>
+    alternarRecursoAdicional("disparo", e.target.checked));
+}
+
+/* -- tela: tráfego ------------------------------------------------- */
+
+const ROTULOS_TIPO_VEICULO = { moto: "Motos", carro: "Carros", onibus: "Ônibus", caminhao: "Caminhões" };
+
+async function telaTrafego() {
+  const dados = await api("/v1/trafego");
+  const porHora = {};
+  dados.por_hora.forEach((h) => { porHora[h.hora] = h.total; });
+  const maxHora = Math.max(...Object.values(porHora), 1);
+  const barras = Array.from({ length: 24 }, (_, hora) => {
+    const total = porHora[hora] || 0;
+    return `<div class="barra-dia" title="${hora}h: ${total}">
+      <div class="seg-conf" style="height:${(total / maxHora) * 132}px"></div></div>`;
+  }).join("");
+  const rotulosHora = Array.from({ length: 24 }, (_, h) => `<span>${String(h).padStart(2, "0")}h</span>`).join("");
+
+  const cartoesTipo = dados.por_tipo.length
+    ? dados.por_tipo.map((t) => cartao("", t.total, ROTULOS_TIPO_VEICULO[t.tipo] || t.tipo)).join("")
+    : "";
+
+  const linhasNo = dados.por_no.length
+    ? dados.por_no.map((n) => `<tr><td>${texto(n.no_id)}</td><td class="num">${n.total}</td></tr>`).join("")
+    : `<tr><td colspan="2" class="vazio">Nenhum nó reportou tráfego ainda.</td></tr>`;
+
+  $("conteudo").innerHTML = `
+    <div class="topo-tela"><div><h1>Tráfego</h1>
+      <div class="sub">Contagem e classificação por tipo de veículo</div></div></div>
+    <div class="aviso-tela">${texto(dados.observacao)}</div>
+    ${cartoesTipo ? `<div class="grade-cartoes">${cartoesTipo}</div>` : `<p class="vazio">Sem dado de tráfego ainda.</p>`}
+    <div class="bloco"><h3>Volume por hora do dia</h3>
+      <div class="barras">${barras}</div><div class="barra-rotulos">${rotulosHora}</div></div>
+    <div class="bloco"><h3>Por nó</h3>
+      <table class="tabela"><tr><th>Nó</th><th class="num">Veículos</th></tr>${linhasNo}</table></div>`;
+}
+
+/* -- tela: disparo de arma (módulo em desenvolvimento) ------------- */
+
+async function telaDisparo() {
+  const dados = await api("/v1/alertas-disparo-conceito");
+  const linhas = dados.alertas.length
+    ? dados.alertas.map((a) => `<tr>
+        <td>${quando(a.recebido_em)}</td>
+        <td>${texto(a.no_id)}</td>
+        <td class="num">${numero(a.pico_relativo_db, 1)} dB acima do ruído de fundo</td>
+        <td>${a.atendido ? "atendido" : `<button class="secundario" data-atender-disparo="${a.id}">Marcar atendido</button>`}</td>
+      </tr>`).join("")
+    : `<tr><td colspan="4" class="vazio">Nenhuma ocorrência registrada no período.</td></tr>`;
+
+  $("conteudo").innerHTML = `
+    <div class="topo-tela"><div>
+      <h1>Disparo de arma de fogo <span class="etiqueta pendente_revisao">em desenvolvimento</span></h1>
+      <div class="sub">Detecção de eventos sonoros de alta intensidade</div></div></div>
+    <div class="aviso-tela">Módulo em desenvolvimento, ainda não operacional. O que a
+      tela mostra são picos sonoros bem acima do ruído de fundo do ponto, sem
+      distinguir a origem: fogos, escapamento estourando e batida de porta produzem
+      assinatura parecida. A classificação por tipo de som depende de gravação em campo
+      e de validação junto à Guarda Municipal, que é a etapa seguinte deste módulo.</div>
+    <table class="tabela"><tr><th>Quando</th><th>Nó</th><th class="num">Intensidade</th><th></th></tr>${linhas}</table>`;
+
+  $("conteudo").querySelectorAll("[data-atender-disparo]").forEach((botao) => {
+    botao.addEventListener("click", async () => {
+      await api(`/v1/alertas-disparo-conceito/${botao.dataset.atenderDisparo}/atender`, { method: "POST" });
+      telaDisparo();
+    });
+  });
 }
 
 /* -- utilidades --------------------------------------------------- */
@@ -608,10 +731,10 @@ function rotuloStatus(s) {
    o status é sempre resultado de (ou espera por) decisão humana (D2). */
 function explicacaoStatus(s) {
   return {
-    pendente_revisao: "aguarda validação humana: nenhum evento vira estatística de priorização sem um operador confirmar.",
-    confirmado: "um operador confirmou a ocorrência — só agora ela conta na priorização.",
+    pendente_revisao: "aguarda validação humana. Nenhum evento vira estatística de priorização sem um operador confirmar.",
+    confirmado: "um operador confirmou a ocorrência, e só a partir daí ela conta na priorização.",
     confirmado_multa: "confirmado por operador em modo de autuação, com instrumento certificado.",
-    rejeitado: "um operador revisou e descartou — não entra na priorização, mas fica registrado.",
+    rejeitado: "um operador revisou e descartou. Não entra na priorização, mas fica registrado.",
   }[s] || "";
 }
 /* Escapa tudo que vem da API antes de entrar no HTML: campos passam pelo nó e

@@ -119,9 +119,9 @@ def criar_rotas(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    "este evento foi capturado em modo=triagem: ele alimenta "
-                    "priorização de fiscalização e não pode virar autuação. "
-                    "Ver docs/legal/inmetro.md"
+                    "Este evento foi capturado em modo de triagem. Ele alimenta a "
+                    "priorização da fiscalização e não pode ser convertido em "
+                    "autuação."
                 ),
             )
 
@@ -261,6 +261,47 @@ def criar_rotas(
                 status_code=status.HTTP_404_NOT_FOUND, detail="violação não encontrada"
             )
         return {"status": "atendido", "id": violacao_id}
+
+    @rotas.get("/alertas-disparo-conceito")
+    def alertas_disparo(
+        apenas_pendentes: bool = False,
+        identidade: Identidade = Depends(operador_autenticado),
+    ):
+        """Canal separado (D14): candidato de transiente do protótipo
+        conceitual de disparo (edge/gunshot_detection). NUNCA "disparo
+        confirmado" — ver docs/DECISIONS.md D16."""
+        linhas = db.listar_alertas_disparo(conexao, apenas_pendentes=apenas_pendentes)
+        return {
+            "alertas": [
+                {
+                    "id": linha["id"],
+                    "no_id": linha["no_id"],
+                    "pico_relativo_db": linha["pico_relativo_db"],
+                    "instante_relativo_s": linha["instante_relativo_s"],
+                    "ocorrido_em": linha["ocorrido_em"],
+                    "recebido_em": linha["recebido_em"],
+                    "atendido": bool(linha["atendido"]),
+                    "validado": False,
+                }
+                for linha in linhas
+            ],
+            "aviso": (
+                "Módulo em desenvolvimento. A detecção identifica picos sonoros "
+                "acima do ruído de fundo, sem distinguir a origem do som."
+            ),
+        }
+
+    @rotas.post("/alertas-disparo-conceito/{alerta_id}/atender")
+    def atender_disparo(
+        alerta_id: int, identidade: Identidade = Depends(operador_autenticado)
+    ):
+        with db.transacao(conexao):
+            encontrado = db.atender_alerta_disparo(conexao, alerta_id)
+        if not encontrado:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="alerta não encontrado"
+            )
+        return {"status": "atendido", "id": alerta_id}
 
     @rotas.get("/nos")
     def nos(identidade: Identidade = Depends(operador_autenticado)):

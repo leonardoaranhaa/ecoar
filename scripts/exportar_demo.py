@@ -26,7 +26,7 @@ if str(RAIZ) not in sys.path:
 
 from backend.aplicacao import criar_app
 from backend.config import carregar
-from scripts.semear_demo import _heartbeats_e_violacao, semear
+from scripts.semear_demo import _heartbeats_e_violacao, _trafego_e_disparo_conceito, semear
 
 
 def exportar() -> dict:
@@ -50,6 +50,7 @@ def exportar() -> dict:
         conexao = app.state.conexao
         semear(config, cliente)
         _heartbeats_e_violacao(config, conexao, cliente)
+        _trafego_e_disparo_conceito(config, cliente)
 
         def pegar(caminho, cab=cab_adm):
             resposta = cliente.get(caminho, headers=cab)
@@ -68,6 +69,10 @@ def exportar() -> dict:
             "auditoria_verif": pegar("/v1/auditoria/verificar"),
             "auditoria": pegar("/v1/auditoria?limite=300"),
             "eventos": pegar("/v1/eventos?limite=300"),
+            # Roadmap modular (D15, D16) — recursos adicionais mediante
+            # acionamento, desligados por padrão no painel.
+            "trafego": pegar("/v1/trafego", cab_op),
+            "alertas_disparo": pegar("/v1/alertas-disparo-conceito", cab_op),
         }
 
         # Detalhe de cada pendente (é o que a fila de revisão abre) e a mídia de
@@ -133,6 +138,8 @@ def main() -> int:
           f"{'íntegra' if retrato['auditoria_verif']['integra'] else 'QUEBRADA'}")
     print(f"  áudio embutido  {'sim' if retrato['midia_audio'] else 'não'}")
     print(f"  imagem embutida {'sim' if retrato['midia_imagem'] else 'não'}")
+    print(f"  tráfego (tipo)  {len(retrato['trafego']['por_tipo'])} tipos agregados")
+    print(f"  disparo (conc.) {len(retrato['alertas_disparo']['alertas'])} candidato(s)")
     return 0
 
 

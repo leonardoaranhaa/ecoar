@@ -96,7 +96,7 @@ def decidir(
     # Fail-closed (D8): subsistema fora do ar não vira "provavelmente nada".
     if predicao is None:
         return _ambiguo(
-            "classificador indisponível — evento registrado sem acionar a câmera",
+            "classificador indisponível. Evento registrado sem acionar a câmera",
             politica,
             (Regra("classificador disponível", False, "predição presente", "ausente"),),
             dentro=False,
@@ -108,7 +108,7 @@ def decidir(
             "classificador disponível",
             True,
             "predição presente",
-            f"{predicao.modelo} {predicao.versao_modelo}",
+            predicao.versao_modelo,
         ),
         Regra(
             "score da classe alvo acima do limiar de acionamento",
@@ -179,7 +179,7 @@ def decidir(
     if score >= politica.score_ambiguo:
         nao_atendidas = [regra.nome for regra in regras if not regra.atendida]
         return _ambiguo(
-            "score compatível com revisão, mas não atendeu: " + "; ".join(nao_atendidas),
+            "segue para revisão humana. Critério não atendido: " + "; ".join(nao_atendidas),
             politica,
             tuple(regras),
             dentro=dentro_do_campo,

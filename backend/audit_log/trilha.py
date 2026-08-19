@@ -39,6 +39,10 @@ EVENTO_REJEITADO = "evento_rejeitado"
 REVISAO = "revisao"
 ACESSO_EVIDENCIA = "acesso_evidencia"
 ALERTA_VIOLACAO = "alerta_violacao"
+# Candidato de transiente do protótipo conceitual de disparo — NUNCA
+# "disparo confirmado" (docs/DECISIONS.md D16). O nome do próprio tipo de
+# evento carrega o aviso de que não é uma classificação validada.
+ALERTA_DISPARO_CONCEITO = "alerta_disparo_conceito_nao_validado"
 TROCA_DE_MODO = "troca_de_modo"
 RETREINO = "retreino"
 

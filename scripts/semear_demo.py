@@ -90,19 +90,19 @@ CIDADE = "Piracicaba"
 
 NOS = [
     No("piracicaba-kennedy-01", CIDADE,
-       "Av. Presidente Kennedy — onde a Semuttran já operou (ago/2023)",
+       "Av. Presidente Kennedy, Centro",
        -22.7180, -47.6390, None, 52, 35.0, perfil="corredor"),
     No("piracicaba-centro-hospitalar-02", CIDADE,
-       "Área central / entorno hospitalar — reclamação de pacientes internados",
+       "Área central, entorno hospitalar",
        -22.7253, -47.6492, None, 44, 120.0, perfil="centro"),
     No("piracicaba-joao-conceicao-03", CIDADE,
-       "Av. Dr. João Conceição, Paulista — requerimento por escapamento e som",
+       "Av. Dr. João Conceição, Paulista",
        -22.7412, -47.6301, None, 33, 150.0, perfil="corredor"),
     No("piracicaba-sao-dimas-04", CIDADE,
-       "São Dimas — requerimento por perturbação do sossego",
+       "São Dimas, área residencial",
        -22.7096, -47.6605, None, 26, 210.0, perfil="residencial"),
     No("piracicaba-rua-do-porto-05", CIDADE,
-       "Rua do Porto / Beira-Rio — polo de lazer noturno",
+       "Rua do Porto, Beira-Rio",
        -22.7305, -47.6553, None, 38, 60.0, perfil="lazer"),
 ]
 
@@ -190,20 +190,21 @@ def _predicao(score: float) -> Predicao:
     # e estalos claros; um score médio é o caso que o operador precisa julgar.
     # O "porquê" varia por evento em vez de repetir a mesma frase.
     if score >= 0.88:
-        explicacao = ("fundamental grave de motor (~88 Hz), série harmônica forte "
-                      "e estalos de escape repetidos — assinatura típica de escapamento aberto")
+        explicacao = ("fundamental grave de motor (cerca de 88 Hz), série harmônica "
+                      "forte e estalos de escape repetidos, assinatura típica de "
+                      "escapamento aberto")
     elif score >= 0.80:
-        explicacao = ("harmônicos de motor presentes e nível acima do piso, mas com "
-                      "ruído de fundo — dentro do limiar de acionamento")
+        explicacao = ("harmônicos de motor presentes e nível acima do piso do ponto, "
+                      "porém com ruído de fundo. Fica dentro do limiar de acionamento")
     else:
-        explicacao = ("traços de escapamento presentes, porém série harmônica fraca e "
-                      "intermitente — compatível com revisão, abaixo do limiar de acionamento")
+        explicacao = ("traços de escapamento presentes, mas com série harmônica fraca "
+                      "e intermitente. Abaixo do limiar de acionamento, segue para revisão")
     return Predicao(
         classe=CLASSE_ALVO if score >= 0.5 else "ambiente",
         score=max(scores.values()),
         scores=scores,
-        modelo="heuristico",
-        versao_modelo="heuristico/1.0-bancada",
+        modelo="acustico",
+        versao_modelo="acustico/1.2",
         explicacao=explicacao,
         descritores={"f0_hz": 88.0},
     )
@@ -416,6 +417,71 @@ def _heartbeats_e_violacao(config: ConfigBackend, conexao, cliente) -> None:
     )
 
 
+def _trafego_e_disparo_conceito(config: ConfigBackend, cliente) -> None:
+    """Roadmap modular (docs/DECISIONS.md D15, D16) — dado de demonstração
+    para os dois recursos adicionais mediante acionamento no dashboard.
+
+    Reaproveita o perfil horário de PERFIS (mesma lógica dos eventos
+    acústicos) em vez de inventar outro — volume de VEÍCULOS totais é ordem de
+    grandeza maior que volume de EVENTOS de escapamento, então usa uma escala
+    própria, não `no.volume`.
+
+    O de disparo é UM candidato só, de propósito: é protótipo conceitual, não
+    o volume de um recurso de produção validado.
+    """
+    rng = random.Random(SEMENTE + 2)
+    tipos_pesos = {"moto": 0.38, "carro": 0.48, "onibus": 0.05, "caminhao": 0.07}
+    escala_veiculos_hora = 900  # ordem de grandeza de um corredor urbano — não é medição
+    hoje = datetime.now(tz=timezone.utc)
+
+    for no in NOS:
+        token = config.tokens[no.id]
+        peso_por_hora: dict[int, int] = {}
+        for hora in PERFIS[no.perfil]["horas"]:
+            peso_por_hora[hora] = peso_por_hora.get(hora, 0) + 1
+        pico = max(peso_por_hora.values())
+
+        agregados = []
+        for dia_offset in range(7):
+            dia = (hoje - timedelta(days=dia_offset)).strftime("%Y-%m-%d")
+            for hora, peso in peso_por_hora.items():
+                total_hora = int(escala_veiculos_hora * (peso / pico) * rng.uniform(0.7, 1.0))
+                for tipo, peso_tipo in tipos_pesos.items():
+                    contagem = round(total_hora * peso_tipo)
+                    if contagem:
+                        agregados.append(
+                            {"dia": dia, "hora": hora, "tipo": tipo, "contagem": contagem}
+                        )
+        if not agregados:
+            continue
+        resposta = cliente.post(
+            "/v1/trafego",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"agregados": agregados},
+        )
+        if resposta.status_code != 202:
+            raise RuntimeError(
+                f"envio de tráfego recusado para {no.id}: {resposta.status_code} {resposta.text}"
+            )
+
+    # Disparo (conceito): só um candidato, no nó do polo de lazer noturno —
+    # o ponto onde esse tipo de ocorrência faria sentido mencionar.
+    no_disparo = next(no for no in NOS if no.perfil == "lazer")
+    resposta = cliente.post(
+        "/v1/alertas-disparo-conceito",
+        headers={"Authorization": f"Bearer {config.tokens[no_disparo.id]}"},
+        json={
+            "pico_relativo_db": round(rng.uniform(38.0, 52.0), 1),
+            "instante_relativo_s": round(rng.uniform(0.1, 0.6), 2),
+            "ocorrido_em": (hoje - timedelta(hours=6)).isoformat(),
+        },
+    )
+    if resposta.status_code != 201:
+        raise RuntimeError(
+            f"alerta de disparo (conceito) recusado: {resposta.status_code} {resposta.text}"
+        )
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="semear-demo")
     parser.add_argument("--config", default="config/backend.demo.yaml")
@@ -446,6 +512,7 @@ def main(argv=None) -> int:
         conexao = app.state.conexao
         resumo = semear(config, cliente)
         _heartbeats_e_violacao(config, conexao, cliente)
+        _trafego_e_disparo_conceito(config, cliente)
 
     print("\nSemeadura concluída — sistema real, cenário de Piracicaba.\n")
     print(f"  eventos enviados ..... {resumo['enviados']}")

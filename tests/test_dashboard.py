@@ -50,3 +50,26 @@ def test_paleta_segue_a_identidade_do_produto():
     assert "#f5a623" in css.lower(), "âmbar para pendente"
     assert "#2ecc71" in css.lower(), "verde para confirmado"
     assert "#ff6b35" in css.lower(), "laranja da marca"
+
+
+def test_painel_nao_expoe_caminho_de_arquivo_interno():
+    """O painel é lido por operador de prefeitura, não por quem mantém o código.
+
+    Referência a `docs/DECISIONS.md`, `config/no-01.yaml` ou numeração interna
+    de roteiro é anotação de desenvolvimento: numa tela de cliente ela não
+    ajuda ninguém e ainda entrega que o texto foi escrito para outro público.
+    Comentário de código pode citar tudo isso à vontade — o que este teste
+    protege é só o que vai para a tela.
+    """
+    import re
+
+    js = (PAINEL / "painel.js").read_text(encoding="utf-8")
+    # Remove comentários de bloco e de linha: só sobra o que pode virar tela.
+    visivel = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    visivel = re.sub(r"^\s*//.*$", "", visivel, flags=re.M)
+
+    for proibido in ("docs/", "config/no-", "DECISIONS.md", "manual-tecnico"):
+        assert proibido not in visivel, (
+            f"{proibido!r} aparece em texto de tela do painel; "
+            "isso é referência interna, não informação para o operador"
+        )

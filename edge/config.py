@@ -207,6 +207,57 @@ class ConfigTamper:
 
 
 @dataclass(frozen=True)
+class ConfigTrafego:
+    """Contagem e classificação de tráfego (roadmap modular, Prompt 13).
+
+    Reaproveita a câmera já instalada, mas roda em paralelo ao pipeline
+    acústico — amostra em intervalo fixo, não por evento de som. Não lê nem
+    guarda placa (não é isso que resolve D10): o que sai daqui é contagem por
+    tipo de veículo, agregada, nunca quadro a quadro.
+    """
+
+    habilitado: bool = False
+    cadencia_s: float = 30.0
+    classificador: str = "simulado"  # simulado | modelo (pretreinado, ainda não integrado)
+
+    def validar(self) -> None:
+        if self.cadencia_s <= 0:
+            raise ConfiguracaoInvalida("trafego.cadencia_s precisa ser positiva")
+        tipos = ("simulado", "modelo")
+        if self.classificador not in tipos:
+            raise ConfiguracaoInvalida(
+                f"trafego.classificador: use um de {tipos}, recebi {self.classificador!r}"
+            )
+
+
+@dataclass(frozen=True)
+class ConfigDisparo:
+    """Detector de transiente para disparo de arma de fogo — PROTÓTIPO CONCEITUAL.
+
+    Não existe validação de que o array de 4 microfones discrimina disparo de
+    outros transientes urbanos (rojão, escapamento estourando, porta batendo).
+    O que este módulo faz de verdade é detecção de transiente/pico de energia
+    — DSP estabelecido — e nada além disso: não classifica "é disparo", não
+    produz score de confiança de arma de fogo. Ver docs/projeto/
+    prompts-claude-code.md (Prompt 16, estudo de viabilidade) e
+    docs/DECISIONS.md (D16) antes de tratar isso como capacidade real.
+
+    `habilitado` nasce False de propósito — isto liga por decisão explícita,
+    nunca por configuração padrão.
+    """
+
+    habilitado: bool = False
+    limiar_energia_db: float = 30.0  # acima do piso local, não valor absoluto de dB
+    janela_analise_ms: float = 50.0
+
+    def validar(self) -> None:
+        if self.limiar_energia_db <= 0:
+            raise ConfiguracaoInvalida("disparo.limiar_energia_db precisa ser positivo")
+        if self.janela_analise_ms <= 0:
+            raise ConfiguracaoInvalida("disparo.janela_analise_ms precisa ser positiva")
+
+
+@dataclass(frozen=True)
 class ConfigUplink:
     """Envio ao backend. O token vem do ambiente, nunca do arquivo."""
 
@@ -403,6 +454,8 @@ class ConfigNo:
     retencao: ConfigRetencao = field(default_factory=ConfigRetencao)
     uplink: ConfigUplink = field(default_factory=ConfigUplink)
     tamper: ConfigTamper = field(default_factory=ConfigTamper)
+    trafego: ConfigTrafego = field(default_factory=ConfigTrafego)
+    disparo: ConfigDisparo = field(default_factory=ConfigDisparo)
     autuacao: ConfigAutuacao | None = None
 
     def validar(self) -> None:
@@ -420,6 +473,8 @@ class ConfigNo:
         self.retencao.validar()
         self.uplink.validar()
         self.tamper.validar()
+        self.trafego.validar()
+        self.disparo.validar()
 
         if self.audio.canais != self.array.n_microfones:
             raise ConfiguracaoInvalida(
@@ -588,6 +643,12 @@ def de_dict(dados: dict[str, Any]) -> ConfigNo:
     tamper = ConfigTamper(
         **_apenas_campos(ConfigTamper, dict(dados.get("tamper") or {}), "tamper")
     )
+    trafego = ConfigTrafego(
+        **_apenas_campos(ConfigTrafego, dict(dados.get("trafego") or {}), "trafego")
+    )
+    disparo = ConfigDisparo(
+        **_apenas_campos(ConfigDisparo, dict(dados.get("disparo") or {}), "disparo")
+    )
 
     autuacao = None
     bloco_autuacao = dados.get("autuacao")
@@ -630,6 +691,8 @@ def de_dict(dados: dict[str, Any]) -> ConfigNo:
         retencao=retencao,
         uplink=uplink,
         tamper=tamper,
+        trafego=trafego,
+        disparo=disparo,
         autuacao=autuacao,
     )
     config.validar()

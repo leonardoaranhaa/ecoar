@@ -10,14 +10,83 @@ Gera:
   <scratchpad>/demo-artifact.html     — versão só-conteúdo, para publicar Artifact
 
 Rode scripts/exportar_demo.py antes, para ter demo/dados-demo.js atualizado.
+
+Opções:
+  --senha=FRASE            senha do portão de acesso (padrão: ver SENHA_PADRAO)
+  --inicio=AAAA-MM-DDTHH:MM  início da validade, horário de Brasília (padrão: agora)
+  --validade-dias=N        dias de validade a partir do início (padrão: 3)
+  --artifact=CAMINHO       também grava a versão só-conteúdo nesse caminho
+  --sem-minificar          pula a minificação de JS/CSS (mais rápido para testar local)
+
+O portão de acesso, a validade e a minificação são proteção do lado do
+cliente (quem souber ler o código-fonte da página contorna) — o objetivo é
+impedir compartilhamento casual do link e elevar o esforço de quem tentar
+copiar a interface, não resistir a alguém tecnicamente determinado.
+
+A minificação exige `npx` (Node.js) disponível — usa `terser` para JS e
+`clean-css-cli` para CSS, baixados sob demanda pelo próprio npx. Sem rede ou
+sem Node, use --sem-minificar.
 """
 
 from __future__ import annotations
 
+import hashlib
+import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+SENHA_PADRAO = "piracicaba2026"
+VALIDADE_DIAS_PADRAO = 3
+FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
 
 RAIZ = Path(__file__).resolve().parents[1]
+
+
+class FerramentaDeMinificacaoAusente(RuntimeError):
+    """npx/terser/clean-css-cli não respondeu. O build para aqui de propósito:
+    gerar uma demo "minificada" que na verdade não foi seria pior que avisar."""
+
+
+def _rodar_minificador(comando: list[str], codigo: str) -> str:
+    try:
+        resultado = subprocess.run(
+            comando,
+            input=codigo,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=120,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as erro:
+        raise FerramentaDeMinificacaoAusente(
+            f"não consegui rodar {comando[0]} {comando[1]}: {erro}. "
+            "Precisa de Node.js com acesso a `npx` (baixa a ferramenta sob "
+            "demanda). Sem rede ou Node, rode com --sem-minificar."
+        ) from erro
+    if resultado.returncode != 0:
+        raise FerramentaDeMinificacaoAusente(
+            f"{' '.join(comando)} falhou (código {resultado.returncode}):\n{resultado.stderr}"
+        )
+    saida = resultado.stdout
+    if not saida.strip():
+        raise FerramentaDeMinificacaoAusente(
+            f"{' '.join(comando)} devolveu saída vazia para uma entrada de "
+            f"{len(codigo)} caracteres — provavelmente falhou em silêncio."
+        )
+    return saida
+
+
+def minificar_js(codigo: str) -> str:
+    return _rodar_minificador(
+        ["npx", "-y", "terser", "-c", "-m", "--comments", "false"], codigo
+    )
+
+
+def minificar_css(codigo: str) -> str:
+    return _rodar_minificador(["npx", "-y", "clean-css-cli"], codigo)
+
 
 # ---------------------------------------------------------------------------
 # Trechos do painel.js real que dependem de servidor. Cada um é substituído por
@@ -83,6 +152,11 @@ function _atender(id) {
   if (v) v.atendido = true;
   return { status: "atendido", id: Number(id) };
 }
+function _atenderDisparo(id) {
+  const a = D.alertas_disparo.alertas.find((x) => String(x.id) === String(id));
+  if (a) a.atendido = true;
+  return { status: "atendido", id: Number(id) };
+}
 async function api(caminho, opcoes = {}) {
   await new Promise((r) => setTimeout(r, 45)); // leve latência: parece a rede real
   const metodo = (opcoes.method || "GET").toUpperCase();
@@ -100,12 +174,16 @@ async function api(caminho, opcoes = {}) {
     case "/v1/auditoria/verificar": return D.auditoria_verif;
     case "/v1/auditoria": return D.auditoria;
     case "/v1/eventos": return _listarEventos(p);
+    case "/v1/trafego": return D.trafego;
+    case "/v1/alertas-disparo-conceito": return D.alertas_disparo;
   }
   if ((m = caminhoBase.match(/^\\/v1\\/eventos\\/(\\d+)$/))) return D.detalhes[m[1]];
   if ((m = caminhoBase.match(/^\\/v1\\/eventos\\/(\\d+)\\/revisao$/)) && metodo === "POST")
     return _revisar(m[1], JSON.parse(opcoes.body || "{}"));
   if ((m = caminhoBase.match(/^\\/v1\\/violacoes\\/(\\d+)\\/atender$/)) && metodo === "POST")
     return _atender(m[1]);
+  if ((m = caminhoBase.match(/^\\/v1\\/alertas-disparo-conceito\\/(\\d+)\\/atender$/)) && metodo === "POST")
+    return _atenderDisparo(m[1]);
   throw new Error("rota de demonstração desconhecida: " + caminhoBase);
 }'''
 
@@ -210,17 +288,13 @@ if (salvo) {
   api("/v1/eu").then((eu) => { estado.eu = eu; abrirPainel(); }).catch(() => sair());
 }'''
 
-INIT_DEMO = '''/* DEMONSTRAÇÃO: pré-preenche o token e explica que qualquer valor entra. */
+INIT_DEMO = '''/* DEMONSTRAÇÃO: pré-preenche o token, já que não há servidor para validar. */
 $("token").value = "admin-studio-cerne";
 $("token").type = "text";
 const dica = document.createElement("p");
 dica.className = "rodape-acesso";
-dica.innerHTML = "<strong>Demonstração — cenário de Piracicaba.</strong> " +
-  "Cinco pontos escolhidos a partir de documentos públicos do município " +
-  "(operação da Semuttran, requerimentos da Câmara). Os volumes são " +
-  "construídos para a demonstração, <em>não</em> são medição de campo.<br><br>" +
-  "Qualquer token entra. Use um token com <em>operador</em> para ver o painel " +
-  "sem as telas de admin (Modelo e Auditoria).";
+dica.innerHTML = "<strong>Ambiente de demonstração.</strong> Cinco pontos de " +
+  "Piracicaba, com dados ilustrativos para apresentação do sistema.";
 $("form-acesso").insertBefore(dica, $("erro-acesso"));'''
 
 CSS_DEMO_EXTRA = '''
@@ -366,26 +440,26 @@ TOUR_JS = r'''
   const $ = (id) => document.getElementById(id);
 
   const passos = [
-    { alvo: ".marca-lateral", titulo: "ECOAR — cenário de Piracicaba",
-      corpo: "Plataforma de fiscalização sonora em <b>modo de triagem</b>: ouve, localiza e registra ocorrências de escapamento, e mostra onde e quando o problema é pior. Os <b>cinco pontos</b> desta tela saíram de levantamento documental sobre Piracicaba — operação da Semuttran na Av. Presidente Kennedy, requerimentos da Câmara, polo de lazer da Rua do Porto. Vou apresentar o essencial em um minuto." },
+    { alvo: ".marca-lateral", titulo: "ECOAR",
+      corpo: "Plataforma de fiscalização sonora operando em <b>modo de triagem</b>. Os sensores ouvem, localizam e registram ocorrências de escapamento adulterado, e o painel mostra onde e quando o problema se concentra. Esta demonstração usa cinco pontos de Piracicaba." },
     { tela: "priorizacao", alvo: ".heatmap", titulo: "Quando o problema é pior",
-      corpo: "Mapa de calor por dia da semana × hora, só de eventos <b>confirmados por operador</b>. É o que a prefeitura leva para a equipe de blitz — direciona a fiscalização humana que já existe." },
+      corpo: "Mapa de calor por dia da semana e hora, montado apenas com eventos <b>confirmados por operador</b>. É o material que a equipe de fiscalização usa para definir dia e horário de blitz." },
     { tela: "priorizacao", alvo: ".bloco:last-of-type .tabela", titulo: "Onde o problema é pior",
-      corpo: "Os cinco pontos de Piracicaba ordenados por ocorrências confirmadas. Cada ponto saiu de um documento — operação da Semuttran, requerimento da Câmara, polo de lazer. O produto responde <b>onde e quando</b> — não <b>quem</b>: em triagem, placa não é lida." },
-    { tela: "revisao", alvo: ".coluna-fila", titulo: "Toda ocorrência passa por um humano",
-      corpo: "Nenhum evento vira estatística sozinho. O operador revisa cada um antes de contar — é a regra que dá valor jurídico à evidência." },
-    { tela: "revisao", abrir: true, alvo: ".grade-medidas", titulo: "O que o nó mediu",
-      corpo: "Score do classificador, ângulo da fonte (com margem de erro) e nível sonoro. O nível vem do array e é <b>estimativa sem valor legal</b> — o sistema é honesto sobre isso na própria tela." },
+      corpo: "Os pontos monitorados, ordenados por ocorrências confirmadas. Em modo de triagem o sistema responde <b>onde e quando</b>, nunca <b>quem</b>: a placa não é lida nem armazenada." },
+    { tela: "revisao", alvo: ".coluna-fila", titulo: "Toda ocorrência passa por um operador",
+      corpo: "Nenhum evento entra na estatística sozinho. Cada um é revisado antes de contar, e é isso que sustenta a evidência em caso de contestação." },
+    { tela: "revisao", abrir: true, alvo: ".grade-medidas", titulo: "O que o sensor registrou",
+      corpo: "Score do classificador, ângulo da fonte com margem de erro, e nível sonoro. O nível vem do array de microfones e é uma <b>estimativa sem valor legal</b>, o que fica declarado na própria tela." },
     { tela: "revisao", abrir: true, alvo: ".porque", titulo: "O porquê do resultado",
-      corpo: "A leitura em uma frase: por que o evento é <b>acionar</b>, <b>ambíguo</b> ou <b>descartar</b>, e por que está <b>pendente</b> (esperando o operador). A decisão do nó é determinística e versionada." },
+      corpo: "Em uma frase: por que o evento foi classificado como <b>acionar</b>, <b>ambíguo</b> ou <b>descartar</b>, e por que ainda está <b>pendente</b>. A decisão do sensor é determinística e versionada." },
     { tela: "revisao", abrir: true, alvo: ".regras", titulo: "As regras, uma a uma",
-      corpo: "A decisão não é caixa-preta: são regras explícitas, cada uma com o que se esperava e o que se mediu. É o que transforma \"o sistema decidiu\" em \"decidiu por estas razões\"." },
+      corpo: "A decisão não é caixa-preta. São regras explícitas, cada uma mostrando o que se esperava e o que foi medido, de modo que a conclusão possa ser reconstruída depois." },
     { tela: "revisao", abrir: true, alvo: ".decisao", titulo: "A validação humana",
-      corpo: "Confirmar ou rejeitar, com observação registrada em nome do operador. Só o que for confirmado entra na priorização — e a decisão nunca se apaga, corrige-se por cima." },
+      corpo: "Confirmar ou rejeitar, com observação registrada em nome do operador. Só o que for confirmado entra na priorização, e a decisão nunca é apagada: correção se faz com um novo registro por cima." },
     { tela: "auditoria", alvo: ".grade-cartoes", titulo: "À prova de adulteração", admin: true,
-      corpo: "Cada passo — recebimento, acesso à evidência, decisão — é encadeado por hash. Mexer no histórico quebra a cadeia, e o painel acusa na hora." },
+      corpo: "Recebimento, acesso à evidência e decisão ficam encadeados por hash. Qualquer alteração no histórico quebra a cadeia, e o painel aponta na hora." },
     { alvo: ".marca-lateral", titulo: "Pronto",
-      corpo: "Explore à vontade. O cenário é de <b>Piracicaba</b>, com pontos tirados de documentos públicos — mas os volumes são construídos, não medidos: a campanha de gravação em campo é o passo seguinte. Clique no <b>?</b> no canto para rever este guia." },
+      corpo: "Explore o painel à vontade. Os dados desta demonstração são ilustrativos: a campanha de gravação em campo é a etapa que consolida os números reais da cidade. O botão <b>?</b> no canto reabre este guia." },
   ];
 
   let idx = 0, hi = null, card = null, ativo = false;
@@ -534,6 +608,177 @@ TOUR_JS = r'''
 FAIXA_DEMO_FIM = ""  # marcador
 
 # ---------------------------------------------------------------------------
+# Portão de acesso (demonstração): senha + validade por data. Proteção do
+# lado do cliente — quem souber ler o código-fonte da página contorna — o
+# objetivo é impedir que o link puro circule sem controle, não resistir a
+# alguém tecnicamente determinado. O conteúdo real (#acesso, #painel) fica
+# escondido por CSS até o portão liberar, então não há flash do painel antes
+# da checagem.
+# ---------------------------------------------------------------------------
+
+PORTAO_CSS = '''
+/* -- portão de acesso (demonstração) ------------------------------- */
+body:not(.portao-liberado) #acesso,
+body:not(.portao-liberado) #painel { display: none !important; }
+
+#portao {
+  min-height: 100vh; display: grid; place-items: center; padding: 24px;
+}
+#portao .cartao-acesso { text-align: left; }
+#portao .marca { font-size: 26px; }
+#portao p.explicacao {
+  color: var(--texto-fraco); font-size: 13px; line-height: 1.6; margin: 4px 0 14px;
+}
+#portao .erro-portao {
+  color: var(--vermelho); font-size: 12.5px; margin: -10px 0 16px; min-height: 1em;
+}
+#portao .selo-expirado {
+  display: inline-block; margin-bottom: 14px; padding: 4px 10px;
+  border-radius: 20px; background: rgba(224,82,82,0.14); color: var(--vermelho);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+}
+#portao .aviso-portao { margin: 4px 0 20px; line-height: 1.55; }
+#portao .aviso-portao strong { color: var(--texto); }
+#portao .selo-aguardando {
+  display: inline-block; margin-bottom: 14px; padding: 4px 10px;
+  border-radius: 20px; background: rgba(245,166,35,0.14); color: var(--ambar);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+}
+'''
+
+RODAPE_MARCA_CSS = '''
+/* -- rodapé de marca e confidencialidade (demonstração) ------------ */
+.rodape-marca {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 6px 12px; font-size: 10.5px; color: var(--texto-fraco);
+  background: rgba(14,17,19,0.88); border-top: 1px solid var(--borda);
+  font-family: var(--mono); letter-spacing: 0.02em; text-align: center;
+}
+.rodape-marca strong { color: var(--texto); font-weight: 600; }
+@media (max-width: 640px) { .rodape-marca { font-size: 9.5px; padding: 5px 8px; } }
+'''
+
+RODAPE_MARCA_HTML = (
+    '<div class="rodape-marca">'
+    "<strong>ECOAR&trade;</strong> · Studio Cerne · material confidencial de "
+    "demonstração, não distribuir"
+    "</div>"
+)
+
+
+PORTAO_JS_MODELO = r'''
+(function () {
+  "use strict";
+  var HASH_SENHA = "__HASH_SENHA__";
+  var INICIO_EM = "__INICIO_EM__";
+  var EXPIRA_EM = "__EXPIRA_EM__";
+  var CHAVE_SESSAO = "ecoar-demo-portao-v1";
+  var $ = function (id) { return document.getElementById(id); };
+
+  function aindaNaoComecou() { return new Date() < new Date(INICIO_EM); }
+  function expirado() { return new Date() > new Date(EXPIRA_EM); }
+
+  function formatarBrasilia(iso) {
+    try {
+      return new Date(iso).toLocaleString("pt-BR", {
+        timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit",
+        year: "numeric", hour: "2-digit", minute: "2-digit",
+      }) + " (horário de Brasília)";
+    } catch (e) { return iso; }
+  }
+
+  async function sha256(texto) {
+    var buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
+    return Array.from(new Uint8Array(buf))
+      .map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+  }
+
+  function liberar() {
+    try { sessionStorage.setItem(CHAVE_SESSAO, "1"); } catch (e) {}
+    document.body.classList.add("portao-liberado");
+    var p = $("portao");
+    if (p) p.remove();
+  }
+
+  function montarAviso(selo, corpo) {
+    var raiz = document.createElement("div");
+    raiz.id = "portao";
+    raiz.innerHTML =
+      '<div class="cartao-acesso" style="text-align:center">' + selo +
+      '<h1 class="marca">ECOAR</h1>' +
+      '<p class="explicacao">' + corpo + '</p>' +
+      '</div>';
+    document.body.insertBefore(raiz, document.body.firstChild);
+  }
+
+  function montarAindaNaoComecou() {
+    montarAviso(
+      '<span class="selo-aguardando">ainda não disponível</span>',
+      "Esta demonstração abre em " + formatarBrasilia(INICIO_EM) + ". " +
+      "Volte a este link a partir desse horário."
+    );
+  }
+
+  function montarExpirado() {
+    montarAviso(
+      '<span class="selo-expirado">link expirado</span>',
+      "O acesso a esta demonstração venceu. Peça um novo link a quem " +
+      "compartilhou este material."
+    );
+  }
+
+  function montarSenha() {
+    var raiz = document.createElement("div");
+    raiz.id = "portao";
+    raiz.innerHTML =
+      '<form class="cartao-acesso" id="form-portao">' +
+      '<h1 class="marca">ECOAR</h1>' +
+      '<p class="explicacao">Demonstração de acesso restrito. ' +
+      'Informe a senha combinada para continuar.</p>' +
+      '<div class="aviso-tela aviso-portao">' +
+      '<strong>Página estática de demonstração.</strong> Mostra o que o ' +
+      'software ECOAR faz de verdade, mas com dados fictícios: os pontos, ' +
+      'eventos e números aqui foram montados para esta apresentação, sem ' +
+      'nenhuma captura de campo ou sensor instalado por trás.' +
+      '</div>' +
+      '<label for="senha-portao">Senha de acesso</label>' +
+      '<input id="senha-portao" type="password" autocomplete="off" required>' +
+      '<p class="erro-portao" id="erro-portao" hidden>Senha incorreta.</p>' +
+      '<button type="submit">Entrar</button>' +
+      '</form>';
+    document.body.insertBefore(raiz, document.body.firstChild);
+    $("form-portao").addEventListener("submit", async function (ev) {
+      ev.preventDefault();
+      var valor = $("senha-portao").value || "";
+      var hash = await sha256(valor);
+      if (hash === HASH_SENHA) { liberar(); }
+      else {
+        $("erro-portao").hidden = false;
+        $("senha-portao").value = "";
+        $("senha-portao").focus();
+      }
+    });
+  }
+
+  if (aindaNaoComecou()) { montarAindaNaoComecou(); return; }
+  if (expirado()) { montarExpirado(); return; }
+  var jaLiberado = false;
+  try { jaLiberado = sessionStorage.getItem(CHAVE_SESSAO) === "1"; } catch (e) {}
+  if (jaLiberado) { document.body.classList.add("portao-liberado"); }
+  else { montarSenha(); }
+})();
+'''
+
+
+def _portao_js(hash_senha: str, inicio_iso: str, expira_iso: str) -> str:
+    return (
+        PORTAO_JS_MODELO.replace("__HASH_SENHA__", hash_senha)
+        .replace("__INICIO_EM__", inicio_iso)
+        .replace("__EXPIRA_EM__", expira_iso)
+    )
+
+# ---------------------------------------------------------------------------
 # Fila de revisão no celular — lista OU detalhe, nunca as duas empilhadas.
 #
 # Na tela larga a fila e o detalhe ficam lado a lado (.revisao é grid de duas
@@ -629,22 +874,50 @@ def corpo_do_painel() -> str:
     return corpo.strip()
 
 
-def montar(standalone: bool) -> str:
-    css = (RAIZ / "dashboard" / "estilo.css").read_text(encoding="utf-8") + CSS_DEMO_EXTRA + TOUR_CSS
+def montar(
+    standalone: bool,
+    senha: str,
+    inicio_em: datetime,
+    expira_em: datetime,
+    minificar: bool = True,
+) -> str:
+    css = (
+        (RAIZ / "dashboard" / "estilo.css").read_text(encoding="utf-8")
+        + CSS_DEMO_EXTRA
+        + TOUR_CSS
+        + PORTAO_CSS
+        + RODAPE_MARCA_CSS
+    )
     dados = (RAIZ / "demo" / "dados-demo.js").read_text(encoding="utf-8")
     # `</` dentro do JSON quebraria o <script>. Escapar mantém o valor idêntico em JS.
     dados = dados.replace("</", "<\\/")
     painel = transformar_painel()
     corpo = corpo_do_painel()
 
+    hash_senha = hashlib.sha256(senha.encode("utf-8")).hexdigest()
+    inicio_iso = inicio_em.astimezone(timezone.utc).isoformat()
+    expira_iso = expira_em.astimezone(timezone.utc).isoformat()
+    portao_js = _portao_js(hash_senha, inicio_iso, expira_iso)
+    tour_js = TOUR_JS
+    mestre_detalhe_js = MESTRE_DETALHE_JS
+
+    if minificar:
+        css = minificar_css(css)
+        portao_js = minificar_js(portao_js)
+        painel = minificar_js(painel)
+        tour_js = minificar_js(tour_js)
+        mestre_detalhe_js = minificar_js(mestre_detalhe_js)
+
     partes = [
         f"<style>{css}</style>",
+        f"<script>{portao_js}</script>",
+        RODAPE_MARCA_HTML,
         FAIXA_DEMO,
         corpo,
         f"<script>{dados}</script>",
         f"<script>{painel}</script>",
-        f"<script>{TOUR_JS}</script>",
-        f"<script>{MESTRE_DETALHE_JS}</script>",
+        f"<script>{tour_js}</script>",
+        f"<script>{mestre_detalhe_js}</script>",
     ]
     conteudo = "\n".join(partes)
 
@@ -665,24 +938,67 @@ def montar(standalone: bool) -> str:
     )
 
 
+def _parse_inicio(valor: str) -> datetime:
+    """`--inicio=AAAA-MM-DDTHH:MM`, interpretado em horário de Brasília."""
+    ingenuo = datetime.fromisoformat(valor)
+    return ingenuo.replace(tzinfo=FUSO_BRASILIA)
+
+
 def main() -> int:
     if not (RAIZ / "demo" / "dados-demo.js").exists():
         raise SystemExit("falta demo/dados-demo.js — rode antes: python -m scripts.exportar_demo")
 
-    standalone = montar(standalone=True)
-    (RAIZ / "demo" / "index.html").write_text(standalone, encoding="utf-8")
-
+    senha = SENHA_PADRAO
+    dias = VALIDADE_DIAS_PADRAO
+    inicio_em = datetime.now(tz=timezone.utc)
     scratch = None
+    minificar = True
     for arg in sys.argv[1:]:
         if arg.startswith("--artifact="):
             scratch = Path(arg.split("=", 1)[1])
+        elif arg.startswith("--senha="):
+            senha = arg.split("=", 1)[1]
+        elif arg.startswith("--validade-dias="):
+            dias = int(arg.split("=", 1)[1])
+        elif arg.startswith("--inicio="):
+            inicio_em = _parse_inicio(arg.split("=", 1)[1])
+        elif arg == "--sem-minificar":
+            minificar = False
+
+    expira_em = inicio_em + timedelta(days=dias)
+
+    standalone = montar(
+        standalone=True,
+        senha=senha,
+        inicio_em=inicio_em,
+        expira_em=expira_em,
+        minificar=minificar,
+    )
+    (RAIZ / "demo" / "index.html").write_text(standalone, encoding="utf-8")
+
     if scratch:
-        scratch.write_text(montar(standalone=False), encoding="utf-8")
+        conteudo_artifact = montar(
+            standalone=False,
+            senha=senha,
+            inicio_em=inicio_em,
+            expira_em=expira_em,
+            minificar=minificar,
+        )
+        scratch.write_text(conteudo_artifact, encoding="utf-8")
 
     kb = len(standalone.encode("utf-8")) / 1024
-    print(f"gerado demo/index.html ({kb:.0f} KB, self-contained)")
+    fmt = "%d/%m/%Y %H:%M"
+    print(f"gerado demo/index.html ({kb:.0f} KB, self-contained{'' if minificar else ', sem minificação'})")
     if scratch:
         print(f"gerado {scratch} (só-conteúdo, para Artifact)")
+    print(f"\nsenha de acesso ...... {senha}")
+    print(f"início da validade ... {inicio_em.astimezone(FUSO_BRASILIA).strftime(fmt)} "
+          "(horário de Brasília)")
+    print(f"expira em ............ {expira_em.astimezone(FUSO_BRASILIA).strftime(fmt)} "
+          f"(horário de Brasília, {dias} dia(s) de validade)")
+    print("\nPasse a senha separadamente de quem receber o link (mensagem, verbalmente).")
+    print("Proteção do lado do cliente: impede compartilhamento casual do link, não é")
+    print("resistente a alguém tecnicamente determinado a ler o código-fonte da página.")
     return 0
 
 

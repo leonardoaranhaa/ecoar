@@ -2,6 +2,7 @@
 
 from backend.audit_log.trilha import (
     ACESSO_EVIDENCIA,
+    ALERTA_DISPARO_CONCEITO,
     ALERTA_VIOLACAO,
     EVENTO_RECEBIDO,
     EVENTO_REJEITADO,
@@ -16,6 +17,7 @@ from backend.audit_log.trilha import (
 
 __all__ = [
     "ACESSO_EVIDENCIA",
+    "ALERTA_DISPARO_CONCEITO",
     "ALERTA_VIOLACAO",
     "EVENTO_RECEBIDO",
     "EVENTO_REJEITADO",

@@ -31,7 +31,7 @@ def criar_rotas(config: ConfigBackend, conexao) -> APIRouter:
             "por_no": db.priorizacao_por_no(conexao),
             "observacao": (
                 "Baseado apenas em eventos confirmados por operador. Em modo de "
-                "triagem, este é o dado de priorização — não gera autuação."
+                "triagem, este é o dado de priorização e não gera autuação."
             ),
         }
 
@@ -57,9 +57,9 @@ def criar_rotas(config: ConfigBackend, conexao) -> APIRouter:
         return {
             "versoes": db.versoes_de_modelo(conexao),
             "observacao": (
-                "Versões derivadas do que a evidência registrou. Promoção e "
-                "reversão de modelo entram com o pipeline de re-treino (etapa 9), "
-                "que depende de volume real de eventos confirmados."
+                "Versões derivadas do que a evidência registrou. A promoção e a "
+                "reversão de modelo entram junto com o re-treino automático, que "
+                "depende de volume real de eventos confirmados em campo."
             ),
         }
 
@@ -80,9 +80,28 @@ def criar_rotas(config: ConfigBackend, conexao) -> APIRouter:
             "autuacao_liberada": False,
             "motivo_autuacao_bloqueada": (
                 "Não há regulamentação federal (Inmetro/CONTRAN) que valide multa "
-                "automática por ruído. O modo de autuação existe e está desligado; "
-                "habilitá-lo é decisão de configuração do nó, com instrumento "
-                "certificado declarado. Ver docs/legal/inmetro.md."
+                "automática por ruído veicular. O modo de autuação existe na "
+                "arquitetura e está desligado. Habilitá-lo depende dessa "
+                "regulamentação e de instrumento de medição certificado instalado "
+                "no ponto."
+            ),
+        }
+
+    @rotas.get("/trafego")
+    def trafego(identidade: Identidade = Depends(operador_autenticado)):
+        """Contagem e classificação de tráfego (roadmap modular).
+
+        Dado operacional de mobilidade, sem placa (D10) e sem passar pela fila
+        de revisão (D2 não se aplica: não há decisão de infração aqui).
+        """
+        return {
+            "por_tipo": db.trafego_por_tipo(conexao),
+            "por_hora": db.trafego_hora_dia(conexao),
+            "por_no": db.trafego_por_no(conexao),
+            "observacao": (
+                "Contagem por tipo de veículo a partir da câmera já instalada no "
+                "ponto. Serve ao planejamento de mobilidade e é independente da "
+                "fiscalização de ruído: não gera autuação nem altera a priorização."
             ),
         }
 
@@ -136,7 +155,7 @@ def _montar_relatorio(hora_dia: list[dict], por_no: list[dict], rejeicao: dict) 
 
     return f"""<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
-<title>ECOAR — Relatório de priorização</title>
+<title>ECOAR · Relatório de priorização</title>
 <style>
   body {{ font-family: Inter, system-ui, sans-serif; color: #14181b; margin: 32px; }}
   h1 {{ font-family: Manrope, sans-serif; letter-spacing: 0.02em; }}
@@ -148,14 +167,14 @@ def _montar_relatorio(hora_dia: list[dict], por_no: list[dict], rejeicao: dict) 
   footer {{ margin-top: 24px; color: #667; font-size: 12px; }}
   @media print {{ body {{ margin: 0; }} }}
 </style></head><body>
-  <h1>ECOAR — Relatório de priorização</h1>
+  <h1>ECOAR · Relatório de priorização</h1>
   <p class="selo">Modo de triagem · dado para direcionar fiscalização humana</p>
   <p>Gerado em {gerado}</p>
 
   <div class="aviso">
     Baseado apenas em eventos <strong>confirmados por operador</strong>. Este
     relatório não constitui auto de infração. O nível sonoro estimado pelo
-    array não tem valor legal de medição.
+    array de microfones não tem valor legal de medição.
   </div>
 
   <h2>Quando o problema é pior</h2>

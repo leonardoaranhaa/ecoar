@@ -170,4 +170,6 @@ def test_versoes_de_modelo_vem_dos_eventos(ambiente):
 
     dados = cliente.get("/v1/modelo/versoes", headers=como(TOKEN_ADMIN)).json()
     assert any("heuristico" in v["versao"] for v in dados["versoes"])
-    assert "etapa 9" in dados["observacao"]
+    # A tela precisa deixar claro que promoção/reversão ainda depende de volume
+    # real de campo, sem citar numeração interna de roteiro na cara do cliente.
+    assert "re-treino" in dados["observacao"]

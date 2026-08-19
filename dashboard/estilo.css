@@ -120,6 +120,9 @@ a { color: var(--azul); }
   border-radius: 10px; padding: 1px 8px; color: var(--ambar);
 }
 .item-nav.so-admin::after { content: "admin"; font-size: 9px; color: var(--texto-fraco); letter-spacing: 0.05em; }
+/* Módulo ainda não operacional: o selo no menu evita que alguém o confunda
+   com uma tela em produção. */
+.item-nav.so-beta::after { content: "beta"; font-size: 9px; color: var(--ambar); letter-spacing: 0.05em; }
 
 .rodape-lateral {
   padding: 14px 20px; border-top: 1px solid var(--borda);
@@ -230,6 +233,21 @@ a { color: var(--azul); }
 .bloco h3 {
   font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em;
   color: var(--texto-fraco); margin: 0 0 10px;
+}
+
+.toggle-linha { padding: 8px 0; }
+.toggle { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
+.toggle input { width: 34px; height: 18px; accent-color: var(--laranja); cursor: pointer; }
+
+/* Destaque visual proposital: sem isso, o bloco se perde entre os demais de
+   Configurações e ninguém encontra o jeito de ligar os recursos. */
+.bloco-recursos {
+  border: 1px solid var(--laranja); border-radius: 8px;
+  padding: 16px 18px; margin-bottom: 24px; background: rgba(255,107,53,0.06);
+}
+.bloco-recursos h3 {
+  font-size: 13px; text-transform: none; letter-spacing: normal;
+  color: var(--texto); margin: 0 0 8px; font-weight: 600;
 }
 audio { width: 100%; }
 .aviso-audio { color: var(--texto-fraco); font-size: 11.5px; margin-top: 6px; }
