@@ -575,7 +575,7 @@ body:not(.portao-liberado) #painel { display: none !important; }
 #portao .cartao-acesso { text-align: left; }
 #portao .marca { font-size: 26px; }
 #portao p.explicacao {
-  color: var(--texto-fraco); font-size: 13px; line-height: 1.6; margin: 4px 0 24px;
+  color: var(--texto-fraco); font-size: 13px; line-height: 1.6; margin: 4px 0 14px;
 }
 #portao .erro-portao {
   color: var(--vermelho); font-size: 12.5px; margin: -10px 0 16px; min-height: 1em;
@@ -585,6 +585,8 @@ body:not(.portao-liberado) #painel { display: none !important; }
   border-radius: 20px; background: rgba(224,82,82,0.14); color: var(--vermelho);
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
 }
+#portao .aviso-portao { margin: 4px 0 20px; line-height: 1.55; }
+#portao .aviso-portao strong { color: var(--texto); }
 #portao .selo-aguardando {
   display: inline-block; margin-bottom: 14px; padding: 4px 10px;
   border-radius: 20px; background: rgba(245,166,35,0.14); color: var(--ambar);
@@ -682,6 +684,12 @@ PORTAO_JS_MODELO = r'''
       '<h1 class="marca">ECOAR</h1>' +
       '<p class="explicacao">Demonstração de acesso restrito. ' +
       'Informe a senha combinada para continuar.</p>' +
+      '<div class="aviso-tela aviso-portao">' +
+      '<strong>Página estática de demonstração.</strong> Mostra o que o ' +
+      'software ECOAR faz de verdade, mas com dados fictícios: os pontos, ' +
+      'eventos e números aqui foram montados para esta apresentação, sem ' +
+      'nenhuma captura de campo ou sensor instalado por trás.' +
+      '</div>' +
       '<label for="senha-portao">Senha de acesso</label>' +
       '<input id="senha-portao" type="password" autocomplete="off" required>' +
       '<p class="erro-portao" id="erro-portao" hidden>Senha incorreta.</p>' +

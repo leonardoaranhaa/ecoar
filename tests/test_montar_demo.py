@@ -68,6 +68,17 @@ def test_inicio_e_expiracao_vao_para_a_pagina_em_utc(montar):
     assert expira.isoformat() in pagina
 
 
+def test_portao_avisa_que_e_demonstracao_com_dados_ficticios(montar):
+    """Quem recebe o link precisa saber, antes de digitar a senha, que é uma
+    página estática de demonstração e que nada ali é dado real."""
+    inicio, expira = _janela()
+    pagina = montar.montar(standalone=True, senha="x", inicio_em=inicio, expira_em=expira)
+
+    assert "aviso-portao" in pagina
+    assert "dados fictícios" in pagina.lower() or "dados ficticios" in pagina.lower()
+    assert "demonstra" in pagina.lower()
+
+
 def test_marca_ecoar_aparece_no_rodape(montar):
     inicio, expira = _janela()
     pagina = montar.montar(standalone=True, senha="x", inicio_em=inicio, expira_em=expira)
